@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from "svelte";
+  import SidePanel from "./SidePanel.svelte";
 
   let {
     selectedText,
@@ -10,40 +10,9 @@
   } = $props();
 
   const highlightColors = ["yellow", "green", "blue", "pink", "orange"];
-
-  let initialFocusEl;
-
-  onMount(() => {
-    const previouslyFocused = document.activeElement;
-    initialFocusEl?.focus();
-    return () => {
-      if (previouslyFocused instanceof HTMLElement) {
-        previouslyFocused.focus();
-      }
-    };
-  });
 </script>
 
-<button class="backdrop" onclick={onClose} aria-label="Close" tabindex="-1"></button>
-<div
-  class="annotation-panel"
-  role="dialog"
-  aria-modal="true"
-  aria-labelledby="annotation-panel-title"
->
-  <div class="annotation-panel-header">
-    <h3 id="annotation-panel-title">Add Highlight</h3>
-    <button
-      class="close-panel-btn"
-      onclick={onClose}
-      aria-label="Close annotation panel"
-      bind:this={initialFocusEl}
-    >
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M18 6L6 18M6 6l12 12" />
-      </svg>
-    </button>
-  </div>
+<SidePanel title="Add highlight" labelId="annotation-panel-title" {onClose}>
   <div class="selected-text">
     "{selectedText?.slice(0, 100)}{selectedText?.length > 100 ? '...' : ''}"
   </div>
@@ -53,7 +22,7 @@
         class="color-btn"
         class:selected={annotationColor === color}
         style="background-color: {color};"
-        onclick={() => annotationColor = color}
+        onclick={() => (annotationColor = color)}
         aria-label="Select {color} highlight"
       ></button>
     {/each}
@@ -67,81 +36,9 @@
   <button class="save-annotation-btn" onclick={onSave}>
     Save highlight
   </button>
-</div>
+</SidePanel>
 
 <style>
-  .backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.3);
-    border: none;
-    padding: 0;
-    cursor: default;
-    z-index: 1002;
-    animation: fadeIn 0.15s ease-out;
-  }
-
-  @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
-
-  .annotation-panel {
-    position: fixed;
-    top: 0;
-    right: 0;
-    width: 350px;
-    max-width: 90vw;
-    height: 100vh;
-    background: var(--surface);
-    border-left: 1px solid var(--border);
-    padding: 1.5rem;
-    z-index: 1003;
-    box-shadow: -4px 0 20px rgba(0, 0, 0, 0.15);
-    animation: slideIn 0.2s ease-out;
-    display: flex;
-    flex-direction: column;
-    overflow-y: auto;
-  }
-
-  @keyframes slideIn {
-    from { transform: translateX(100%); }
-    to { transform: translateX(0); }
-  }
-
-  .annotation-panel-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1rem;
-  }
-
-  .annotation-panel-header h3 {
-    margin: 0;
-    font-family: var(--font-serif);
-    font-size: 1.15rem;
-    font-weight: 500;
-    color: var(--text);
-  }
-
-  .close-panel-btn {
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 0.25rem;
-    color: var(--text-muted);
-    border-radius: var(--radius-sm);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background 0.15s, color 0.15s;
-  }
-
-  .close-panel-btn:hover {
-    background: var(--tint);
-    color: var(--text);
-  }
-
   .selected-text {
     font-family: var(--font-serif);
     font-style: italic;

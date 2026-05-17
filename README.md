@@ -1,6 +1,8 @@
 # Quiret
 
-A minimal, low-footprint ebook server for your home server.
+A minimal, low-footprint ebook library for your home server.
+
+![alt text](image.png)
 
 ## Pros
 

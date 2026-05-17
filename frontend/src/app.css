@@ -17,6 +17,9 @@
   --reader-header-bg: rgba(245, 241, 232, 0.92);
   --drop-overlay-bg: rgba(28, 26, 23, 0.18);
   --progress-track: rgba(28, 26, 23, 0.4);
+  --tag-bg: #D85940;
+  --tag-text: #FFFFFF;
+  --overlay-button-bg: rgba(0, 0, 0, 0.65);
 
   --shadow-sm: 0 1px 2px rgba(28, 26, 23, 0.04);
   --shadow: 0 1px 2px rgba(28, 26, 23, 0.04), 0 4px 12px rgba(28, 26, 23, 0.06);
