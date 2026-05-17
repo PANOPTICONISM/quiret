@@ -16,12 +16,8 @@ import (
 	"time"
 )
 
-// ExtractEPUBMetadata extracts title, author, and cover from an EPUB file.
-// coverDir is where the cover image will be saved (as "cover.jpg" or "cover.png").
 func ExtractEPUBMetadata(epubPath, coverDir, fallbackTitle string) (title, author, coverPath string) {
 	title = fallbackTitle
-	author = ""
-	coverPath = ""
 
 	reader, err := zip.OpenReader(epubPath)
 	if err != nil {
@@ -29,141 +25,93 @@ func ExtractEPUBMetadata(epubPath, coverDir, fallbackTitle string) (title, autho
 	}
 	defer reader.Close()
 
-	var containerXML string
-	var opfPath string
-
-	for _, f := range reader.File {
-		if f.Name == "META-INF/container.xml" {
-			rc, err := f.Open()
-			if err != nil {
-				continue
-			}
-			data, err := io.ReadAll(rc)
-			rc.Close()
-			if err != nil {
-				continue
-			}
-			containerXML = string(data)
-			break
-		}
+	var container struct {
+		Rootfiles struct {
+			Rootfile []struct {
+				FullPath string `xml:"full-path,attr"`
+			} `xml:"rootfile"`
+		} `xml:"rootfiles"`
 	}
-
-	if idx := strings.Index(containerXML, "full-path=\""); idx != -1 {
-		start := idx + 11
-		end := strings.Index(containerXML[start:], "\"")
-		if end != -1 {
-			opfPath = containerXML[start : start+end]
-		}
+	containerData, err := readZipFile(reader, "META-INF/container.xml")
+	if err != nil {
+		return
 	}
-
+	if err := xml.Unmarshal(containerData, &container); err != nil {
+		return
+	}
+	if len(container.Rootfiles.Rootfile) == 0 {
+		return
+	}
+	opfPath := container.Rootfiles.Rootfile[0].FullPath
 	if opfPath == "" {
 		return
 	}
 
-	var opfXML string
-	for _, f := range reader.File {
-		if f.Name == opfPath {
-			rc, err := f.Open()
-			if err != nil {
-				continue
+	type epubItem struct {
+		ID         string `xml:"id,attr"`
+		Href       string `xml:"href,attr"`
+		MediaType  string `xml:"media-type,attr"`
+		Properties string `xml:"properties,attr"`
+	}
+	type epubMeta struct {
+		Name    string `xml:"name,attr"`
+		Content string `xml:"content,attr"`
+	}
+	var pkg struct {
+		Metadata struct {
+			Title   []string   `xml:"title"`
+			Creator []string   `xml:"creator"`
+			Meta    []epubMeta `xml:"meta"`
+		} `xml:"metadata"`
+		Manifest struct {
+			Items []epubItem `xml:"item"`
+		} `xml:"manifest"`
+	}
+	opfData, err := readZipFile(reader, opfPath)
+	if err != nil {
+		return
+	}
+	if err := xml.Unmarshal(opfData, &pkg); err != nil {
+		return
+	}
+
+	if len(pkg.Metadata.Title) > 0 {
+		if t := strings.TrimSpace(pkg.Metadata.Title[0]); t != "" {
+			title = t
+		}
+	}
+	if len(pkg.Metadata.Creator) > 0 {
+		author = strings.TrimSpace(pkg.Metadata.Creator[0])
+	}
+
+	var coverHref string
+	opfDir := filepath.Dir(opfPath)
+
+	for _, it := range pkg.Manifest.Items {
+		for _, p := range strings.Fields(it.Properties) {
+			if p == "cover-image" {
+				coverHref = it.Href
+				break
 			}
-			data, err := io.ReadAll(rc)
-			rc.Close()
-			if err != nil {
-				continue
-			}
-			opfXML = string(data)
+		}
+		if coverHref != "" {
 			break
 		}
 	}
 
-	if titleIdx := strings.Index(opfXML, "<dc:title>"); titleIdx != -1 {
-		start := titleIdx + 10
-		end := strings.Index(opfXML[start:], "</dc:title>")
-		if end != -1 {
-			title = opfXML[start : start+end]
-		}
-	}
-
-	if authorIdx := strings.Index(opfXML, "<dc:creator"); authorIdx != -1 {
-		contentStart := strings.Index(opfXML[authorIdx:], ">")
-		if contentStart != -1 {
-			start := authorIdx + contentStart + 1
-			end := strings.Index(opfXML[start:], "</dc:creator>")
-			if end != -1 {
-				author = opfXML[start : start+end]
-			}
-		}
-	}
-
-	opfDir := filepath.Dir(opfPath)
-	var coverHref string
-
-	// Strategy 1: EPUB 3 - Look for item with properties="cover-image"
-	if idx := strings.Index(opfXML, "properties=\"cover-image\""); idx != -1 {
-		itemStart := strings.LastIndex(opfXML[:idx], "<item")
-		if itemStart != -1 {
-			itemEnd := strings.Index(opfXML[itemStart:], "/>")
-			if itemEnd == -1 {
-				itemEnd = strings.Index(opfXML[itemStart:], "</item>")
-			}
-			if itemEnd != -1 {
-				itemTag := opfXML[itemStart : itemStart+itemEnd]
-				if hrefIdx := strings.Index(itemTag, "href=\""); hrefIdx != -1 {
-					start := hrefIdx + 6
-					end := strings.Index(itemTag[start:], "\"")
-					if end != -1 {
-						coverHref = itemTag[start : start+end]
-					}
-				}
-			}
-		}
-	}
-
-	// Strategy 2: EPUB 2 - Look for meta name="cover" content="cover-id"
 	if coverHref == "" {
 		var coverID string
-		if coverIdx := strings.Index(opfXML, "name=\"cover\""); coverIdx != -1 {
-			metaStart := strings.LastIndex(opfXML[:coverIdx], "<meta")
-			if metaStart != -1 {
-				metaEnd := strings.Index(opfXML[metaStart:], "/>")
-				if metaEnd == -1 {
-					metaEnd = strings.Index(opfXML[metaStart:], ">")
-				}
-				if metaEnd != -1 {
-					metaTag := opfXML[metaStart : metaStart+metaEnd]
-					if contentIdx := strings.Index(metaTag, "content=\""); contentIdx != -1 {
-						start := contentIdx + 9
-						end := strings.Index(metaTag[start:], "\"")
-						if end != -1 {
-							coverID = metaTag[start : start+end]
-						}
-					}
-				}
+		for _, m := range pkg.Metadata.Meta {
+			if m.Name == "cover" {
+				coverID = m.Content
+				break
 			}
 		}
-
 		if coverID != "" {
-			searchStr := fmt.Sprintf("id=\"%s\"", coverID)
-			if itemIdx := strings.Index(opfXML, searchStr); itemIdx != -1 {
-				itemStart := strings.LastIndex(opfXML[:itemIdx], "<item")
-				if itemStart != -1 {
-					itemEnd := strings.Index(opfXML[itemStart:], "/>")
-					if itemEnd == -1 {
-						itemEnd = strings.Index(opfXML[itemStart:], "</item>")
-					}
-					if itemEnd != -1 {
-						itemTag := opfXML[itemStart : itemStart+itemEnd]
-						if strings.Contains(itemTag, "media-type=\"image/") {
-							if hrefIdx := strings.Index(itemTag, "href=\""); hrefIdx != -1 {
-								start := hrefIdx + 6
-								end := strings.Index(itemTag[start:], "\"")
-								if end != -1 {
-									coverHref = itemTag[start : start+end]
-								}
-							}
-						}
-					}
+			for _, it := range pkg.Manifest.Items {
+				if it.ID == coverID && strings.HasPrefix(it.MediaType, "image/") {
+					coverHref = it.Href
+					break
 				}
 			}
 		}
@@ -180,60 +128,56 @@ func ExtractEPUBMetadata(epubPath, coverDir, fallbackTitle string) (title, autho
 		}
 	}
 
-	// Extract the cover image if found
-	if coverHref != "" {
-		var coverInZip string
-		if opfDir != "" {
-			coverInZip = filepath.Join(opfDir, coverHref)
-		} else {
-			coverInZip = coverHref
+	if coverHref == "" {
+		return
+	}
+
+	var coverInZip string
+	if opfDir != "" && opfDir != "." {
+		coverInZip = filepath.Join(opfDir, coverHref)
+	} else {
+		coverInZip = coverHref
+	}
+	coverInZip = filepath.ToSlash(coverInZip)
+	coverInZip = strings.ReplaceAll(coverInZip, "%20", " ")
+
+	for _, f := range reader.File {
+		if filepath.ToSlash(f.Name) != coverInZip {
+			continue
 		}
-		coverInZip = filepath.ToSlash(coverInZip)
-		coverInZip = strings.ReplaceAll(coverInZip, "%20", " ")
-
-		for _, f := range reader.File {
-			if f.Name == coverInZip || filepath.ToSlash(f.Name) == coverInZip {
-				rc, err := f.Open()
-				if err != nil {
-					continue
-				}
-
-				data, err := io.ReadAll(rc)
-				rc.Close()
-				if err != nil {
-					continue
-				}
-
-				if !IsImageFile(data) {
-					log.Printf("Cover file %s is not a valid image", f.Name)
-					continue
-				}
-
-				ext := ".jpg"
-				if len(data) > 8 && data[0] == 0x89 && data[1] == 0x50 {
-					ext = ".png"
-				}
-
-				if err := os.MkdirAll(coverDir, 0755); err != nil {
-					continue
-				}
-				coverPath = filepath.Join(coverDir, "cover"+ext)
-				outFile, err := os.Create(coverPath)
-				if err != nil {
-					continue
-				}
-				outFile.Write(data)
-				outFile.Close()
-				break
-			}
+		rc, err := f.Open()
+		if err != nil {
+			break
 		}
+		data, err := io.ReadAll(rc)
+		rc.Close()
+		if err != nil {
+			break
+		}
+		coverPath = writeCoverImage(coverDir, data)
+		if coverPath == "" {
+			log.Printf("Cover file %s could not be saved as a valid image", f.Name)
+		}
+		break
 	}
 
 	return
 }
 
-// ExtractPDFMetadata extracts title and author from a PDF file.
-// originalName is used as the fallback title (should not include file extension).
+func readZipFile(reader *zip.ReadCloser, name string) ([]byte, error) {
+	for _, f := range reader.File {
+		if f.Name == name {
+			rc, err := f.Open()
+			if err != nil {
+				return nil, err
+			}
+			defer rc.Close()
+			return io.ReadAll(rc)
+		}
+	}
+	return nil, fmt.Errorf("file not found in zip: %s", name)
+}
+
 func ExtractPDFMetadata(pdfPath, originalName string) (title, author string) {
 	title = originalName
 	author = ""
@@ -251,42 +195,16 @@ func ExtractPDFMetadata(pdfPath, originalName string) (title, author string) {
 	}
 	content := string(buffer[:n])
 
-	// Try to extract title from PDF metadata
-	if idx := strings.Index(content, "/Title"); idx != -1 {
-		if start := strings.Index(content[idx:], "("); start != -1 {
-			start += idx + 1
-			if end := strings.Index(content[start:], ")"); end != -1 && end < 200 {
-				extractedTitle := content[start : start+end]
-				extractedTitle = strings.TrimSpace(extractedTitle)
-				extractedTitle = strings.ReplaceAll(extractedTitle, "\\(", "(")
-				extractedTitle = strings.ReplaceAll(extractedTitle, "\\)", ")")
-				if len(extractedTitle) > 2 && len(extractedTitle) < 200 {
-					title = extractedTitle
-				}
-			}
-		}
+	if t := extractPDFField(content, "/Title"); len(t) > 2 {
+		title = t
 	}
-
-	// Try to extract author from PDF metadata
-	if idx := strings.Index(content, "/Author"); idx != -1 {
-		if start := strings.Index(content[idx:], "("); start != -1 {
-			start += idx + 1
-			if end := strings.Index(content[start:], ")"); end != -1 && end < 200 {
-				extractedAuthor := content[start : start+end]
-				extractedAuthor = strings.TrimSpace(extractedAuthor)
-				extractedAuthor = strings.ReplaceAll(extractedAuthor, "\\(", "(")
-				extractedAuthor = strings.ReplaceAll(extractedAuthor, "\\)", ")")
-				if len(extractedAuthor) > 0 && len(extractedAuthor) < 200 {
-					author = extractedAuthor
-				}
-			}
-		}
+	if a := extractPDFField(content, "/Author"); a != "" {
+		author = a
 	}
 
 	return
 }
 
-// ExtractPDFCover extracts the first page of a PDF as a JPEG cover image using pdftoppm.
 func ExtractPDFCover(pdfPath, coverDir, bookID string) string {
 	tempBase := filepath.Join(os.TempDir(), "quiret-pdf-"+bookID)
 	tempCover := tempBase + "-001.jpg"
@@ -408,20 +326,10 @@ func ExtractFB2Metadata(fb2Path, coverDir, fallbackTitle string) (title, author,
 			continue
 		}
 		raw, err := base64.StdEncoding.DecodeString(strings.Join(strings.Fields(b.Data), ""))
-		if err != nil || !IsImageFile(raw) {
-			return
+		if err != nil {
+			break
 		}
-		ext := ".jpg"
-		if len(raw) > 8 && raw[0] == 0x89 && raw[1] == 0x50 {
-			ext = ".png"
-		}
-		if err := os.MkdirAll(coverDir, 0755); err != nil {
-			return
-		}
-		coverPath = filepath.Join(coverDir, "cover"+ext)
-		if err := os.WriteFile(coverPath, raw, 0644); err != nil {
-			coverPath = ""
-		}
+		coverPath = writeCoverImage(coverDir, raw)
 		break
 	}
 
@@ -459,25 +367,11 @@ func ExtractCBZCover(cbzPath, coverDir string) string {
 	defer rc.Close()
 
 	data, err := io.ReadAll(rc)
-	if err != nil || !IsImageFile(data) {
+	if err != nil {
 		return ""
 	}
 
-	ext := ".jpg"
-	if len(data) > 8 && data[0] == 0x89 && data[1] == 0x50 {
-		ext = ".png"
-	}
-
-	if err := os.MkdirAll(coverDir, 0755); err != nil {
-		return ""
-	}
-
-	coverPath := filepath.Join(coverDir, "cover"+ext)
-	if err := os.WriteFile(coverPath, data, 0644); err != nil {
-		return ""
-	}
-
-	return coverPath
+	return writeCoverImage(coverDir, data)
 }
 
 func copyFile(src, dst string) error {
@@ -486,6 +380,48 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	return os.WriteFile(dst, data, 0644)
+}
+
+func writeCoverImage(coverDir string, data []byte) string {
+	if !IsImageFile(data) {
+		return ""
+	}
+	ext := ".jpg"
+	if isPNG(data) {
+		ext = ".png"
+	}
+	if err := os.MkdirAll(coverDir, 0755); err != nil {
+		return ""
+	}
+	coverPath := filepath.Join(coverDir, "cover"+ext)
+	if err := os.WriteFile(coverPath, data, 0644); err != nil {
+		return ""
+	}
+	return coverPath
+}
+
+func isPNG(data []byte) bool {
+	return len(data) >= 8 && data[0] == 0x89 && data[1] == 0x50
+}
+
+func extractPDFField(content, key string) string {
+	idx := strings.Index(content, key)
+	if idx == -1 {
+		return ""
+	}
+	start := strings.Index(content[idx:], "(")
+	if start == -1 {
+		return ""
+	}
+	start += idx + 1
+	end := strings.Index(content[start:], ")")
+	if end == -1 || end >= 200 {
+		return ""
+	}
+	val := strings.TrimSpace(content[start : start+end])
+	val = strings.ReplaceAll(val, "\\(", "(")
+	val = strings.ReplaceAll(val, "\\)", ")")
+	return val
 }
 
 // IsImageFile checks if data represents a valid image file by checking magic bytes.

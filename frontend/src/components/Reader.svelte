@@ -41,6 +41,14 @@
   let annotationNote = $state("");
   let annotationColor = $state("yellow");
 
+  const anyPanelOpen = $derived(showAnnotationPanel || showAnnotationsList);
+
+  $effect(() => {
+    if (anyPanelOpen) {
+      headerVisible = false;
+    }
+  });
+
   const isTouchDevice =
     typeof window !== "undefined" &&
     window.matchMedia("(pointer: coarse)").matches;
@@ -233,9 +241,15 @@
   };
 
   const handleKeyPress = (event) => {
+    if (event.key === "Escape") {
+      if (showAnnotationPanel) closeAnnotationPanel();
+      else if (showAnnotationsList) showAnnotationsList = false;
+      else onClose();
+      return;
+    }
+    if (anyPanelOpen) return;
     if (event.key === "ArrowRight") goNext();
     else if (event.key === "ArrowLeft") goPrev();
-    else if (event.key === "Escape") onClose();
   };
 
   const loadPDF = async () => {
@@ -510,54 +524,57 @@
   onfullscreenchange={handleFullscreenChange}
 />
 
-<div
-  class="reader-wrapper"
-  onmousemove={handleMouseMove}
-  ontouchstart={handleTouchStart}
-  ontouchend={handleTouchEnd}
-  role="main"
->
-  <ReaderHeader
-    visible={headerVisible}
-    fileType={bookMetadata?.fileType}
-    annotationsCount={annotations.length}
-    {fontSize}
-    minFontSize={MIN_FONT_SIZE}
-    maxFontSize={MAX_FONT_SIZE}
-    {isFullscreen}
-    {isTouchDevice}
-    {onClose}
-    onToggleAnnotations={() => (showAnnotationsList = !showAnnotationsList)}
-    onIncreaseFontSize={increaseFontSize}
-    onDecreaseFontSize={decreaseFontSize}
-    onToggleFullscreen={toggleFullscreen}
-    onMouseEnter={() => (headerVisible = true)}
-    onMouseLeave={() => (headerVisible = false)}
-  />
-  {#if loading}
-    <div class="loading">
-      <div class="spinner"></div>
-      <p>Loading book...</p>
-    </div>
-  {:else if error}
-    <div class="error">
-      <p>Error: {error}</p>
-      <button onclick={onClose}>Go Back</button>
-    </div>
-  {:else}
-    <div
-      class="reader-container"
-      class:pdf-mode={bookMetadata?.fileType === "pdf"}
-      bind:this={readerContainer}
-      role="region"
-      aria-label="Book reader"
-    ></div>
-    {#if totalLocations > 0}
-      <div class="progress-bar">
-        <span>{Math.round((currentLocation / totalLocations) * 100)}%</span>
+<div class="reader-wrapper">
+  <div
+    class="reader-content"
+    role="main"
+    inert={anyPanelOpen}
+    onmousemove={handleMouseMove}
+    ontouchstart={handleTouchStart}
+    ontouchend={handleTouchEnd}
+  >
+    <ReaderHeader
+      visible={headerVisible}
+      fileType={bookMetadata?.fileType}
+      annotationsCount={annotations.length}
+      {fontSize}
+      minFontSize={MIN_FONT_SIZE}
+      maxFontSize={MAX_FONT_SIZE}
+      {isFullscreen}
+      {isTouchDevice}
+      {onClose}
+      onToggleAnnotations={() => (showAnnotationsList = !showAnnotationsList)}
+      onIncreaseFontSize={increaseFontSize}
+      onDecreaseFontSize={decreaseFontSize}
+      onToggleFullscreen={toggleFullscreen}
+      onMouseEnter={() => (headerVisible = true)}
+      onMouseLeave={() => (headerVisible = false)}
+    />
+    {#if loading}
+      <div class="loading">
+        <div class="spinner"></div>
+        <p>Loading book...</p>
       </div>
+    {:else if error}
+      <div class="error">
+        <p>Error: {error}</p>
+        <button onclick={onClose}>Go Back</button>
+      </div>
+    {:else}
+      <div
+        class="reader-container"
+        class:pdf-mode={bookMetadata?.fileType === "pdf"}
+        bind:this={readerContainer}
+        role="region"
+        aria-label="Book reader"
+      ></div>
+      {#if totalLocations > 0}
+        <div class="progress-bar">
+          <span>{Math.round((currentLocation / totalLocations) * 100)}%</span>
+        </div>
+      {/if}
     {/if}
-  {/if}
+  </div>
   {#if showAnnotationPanel}
     <AnnotationPanel
       {selectedText}
@@ -585,11 +602,16 @@
     width: 100vw;
     height: 100vh;
     background: var(--bg);
-    display: flex;
-    flex-direction: column;
     z-index: 1000;
     overscroll-behavior: none;
     touch-action: pan-x pan-y;
+  }
+
+  .reader-content {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
   }
 
   .reader-container {

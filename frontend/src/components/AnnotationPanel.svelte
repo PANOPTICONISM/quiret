@@ -1,4 +1,6 @@
 <script>
+  import { onMount } from "svelte";
+
   let {
     selectedText,
     annotationNote = $bindable(""),
@@ -8,12 +10,35 @@
   } = $props();
 
   const highlightColors = ["yellow", "green", "blue", "pink", "orange"];
+
+  let initialFocusEl;
+
+  onMount(() => {
+    const previouslyFocused = document.activeElement;
+    initialFocusEl?.focus();
+    return () => {
+      if (previouslyFocused instanceof HTMLElement) {
+        previouslyFocused.focus();
+      }
+    };
+  });
 </script>
 
-<div class="annotation-panel">
+<button class="backdrop" onclick={onClose} aria-label="Close" tabindex="-1"></button>
+<div
+  class="annotation-panel"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="annotation-panel-title"
+>
   <div class="annotation-panel-header">
-    <h3>Add Highlight</h3>
-    <button class="close-panel-btn" onclick={onClose} aria-label="Close annotation panel">
+    <h3 id="annotation-panel-title">Add Highlight</h3>
+    <button
+      class="close-panel-btn"
+      onclick={onClose}
+      aria-label="Close annotation panel"
+      bind:this={initialFocusEl}
+    >
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M18 6L6 18M6 6l12 12" />
       </svg>
@@ -37,7 +62,7 @@
     class="annotation-note"
     bind:value={annotationNote}
     placeholder="Add a note (optional)..."
-    rows="3"
+    rows="6"
   ></textarea>
   <button class="save-annotation-btn" onclick={onSave}>
     Save highlight
@@ -45,22 +70,43 @@
 </div>
 
 <style>
-  .annotation-panel {
+  .backdrop {
     position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: var(--surface);
-    border-top: 1px solid var(--border);
-    padding: 1.5rem;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.3);
+    border: none;
+    padding: 0;
+    cursor: default;
     z-index: 1002;
-    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
-    animation: slideUp 0.2s ease-out;
+    animation: fadeIn 0.15s ease-out;
   }
 
-  @keyframes slideUp {
-    from { transform: translateY(100%); }
-    to { transform: translateY(0); }
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  .annotation-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 350px;
+    max-width: 90vw;
+    height: 100vh;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    padding: 1.5rem;
+    z-index: 1003;
+    box-shadow: -4px 0 20px rgba(0, 0, 0, 0.15);
+    animation: slideIn 0.2s ease-out;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  @keyframes slideIn {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
   }
 
   .annotation-panel-header {

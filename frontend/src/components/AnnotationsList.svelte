@@ -1,11 +1,36 @@
 <script>
+  import { onMount } from "svelte";
+
   let { annotations, onGoTo, onDelete, onClose } = $props();
+
+  let initialFocusEl;
+
+  onMount(() => {
+    const previouslyFocused = document.activeElement;
+    initialFocusEl?.focus();
+    return () => {
+      if (previouslyFocused instanceof HTMLElement) {
+        previouslyFocused.focus();
+      }
+    };
+  });
 </script>
 
-<div class="annotations-list-panel">
+<button class="backdrop" onclick={onClose} aria-label="Close" tabindex="-1"></button>
+<div
+  class="annotations-list-panel"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="annotations-list-title"
+>
   <div class="panel-header">
-    <h3>Highlights ({annotations.length})</h3>
-    <button class="close-panel-btn" onclick={onClose} aria-label="Close annotations list">
+    <h3 id="annotations-list-title">Highlights ({annotations.length})</h3>
+    <button
+      class="close-panel-btn"
+      onclick={onClose}
+      aria-label="Close annotations list"
+      bind:this={initialFocusEl}
+    >
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M18 6L6 18M6 6l12 12" />
       </svg>
@@ -36,6 +61,22 @@
 </div>
 
 <style>
+  .backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.3);
+    border: none;
+    padding: 0;
+    cursor: default;
+    z-index: 1002;
+    animation: fadeIn 0.15s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
   .annotations-list-panel {
     position: fixed;
     top: 0;
@@ -45,8 +86,8 @@
     height: 100vh;
     background: var(--surface);
     border-left: 1px solid var(--border);
-    z-index: 1002;
-    box-shadow: -4px 0 20px rgba(0, 0, 0, 0.08);
+    z-index: 1003;
+    box-shadow: -4px 0 20px rgba(0, 0, 0, 0.15);
     animation: slideIn 0.2s ease-out;
     display: flex;
     flex-direction: column;
