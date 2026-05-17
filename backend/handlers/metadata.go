@@ -3,6 +3,8 @@ package handlers
 import (
 	"archive/zip"
 	"context"
+	"encoding/base64"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"log"
@@ -326,6 +328,104 @@ func ExtractPDFCover(pdfPath, coverDir, bookID string) string {
 	}
 
 	return finalPath
+}
+
+func ExtractFB2Metadata(fb2Path, coverDir, fallbackTitle string) (title, author, coverPath string) {
+	title = fallbackTitle
+
+	data, err := os.ReadFile(fb2Path)
+	if err != nil {
+		return
+	}
+
+	type fb2Image struct {
+		Href string `xml:"href,attr"`
+	}
+	type fb2Author struct {
+		FirstName  string `xml:"first-name"`
+		MiddleName string `xml:"middle-name"`
+		LastName   string `xml:"last-name"`
+		Nickname   string `xml:"nickname"`
+	}
+	type fb2Coverpage struct {
+		Images []fb2Image `xml:"image"`
+	}
+	type fb2TitleInfo struct {
+		BookTitle string       `xml:"book-title"`
+		Authors   []fb2Author  `xml:"author"`
+		Coverpage fb2Coverpage `xml:"coverpage"`
+	}
+	type fb2Description struct {
+		TitleInfo fb2TitleInfo `xml:"title-info"`
+	}
+	type fb2Binary struct {
+		ID          string `xml:"id,attr"`
+		ContentType string `xml:"content-type,attr"`
+		Data        string `xml:",chardata"`
+	}
+	type fb2Book struct {
+		XMLName     xml.Name       `xml:"FictionBook"`
+		Description fb2Description `xml:"description"`
+		Binaries    []fb2Binary    `xml:"binary"`
+	}
+
+	var book fb2Book
+	if err := xml.Unmarshal(data, &book); err != nil {
+		return
+	}
+
+	if t := strings.TrimSpace(book.Description.TitleInfo.BookTitle); t != "" {
+		title = t
+	}
+
+	if len(book.Description.TitleInfo.Authors) > 0 {
+		a := book.Description.TitleInfo.Authors[0]
+		var parts []string
+		for _, p := range []string{a.FirstName, a.MiddleName, a.LastName} {
+			if s := strings.TrimSpace(p); s != "" {
+				parts = append(parts, s)
+			}
+		}
+		author = strings.Join(parts, " ")
+		if author == "" {
+			author = strings.TrimSpace(a.Nickname)
+		}
+	}
+
+	var coverID string
+	for _, img := range book.Description.TitleInfo.Coverpage.Images {
+		if href := strings.TrimPrefix(img.Href, "#"); href != "" {
+			coverID = href
+			break
+		}
+	}
+	if coverID == "" {
+		return
+	}
+
+	for _, b := range book.Binaries {
+		if b.ID != coverID {
+			continue
+		}
+		raw, err := base64.StdEncoding.DecodeString(strings.Join(strings.Fields(b.Data), ""))
+		if err != nil || !IsImageFile(raw) {
+			return
+		}
+		ext := ".jpg"
+		if len(raw) > 8 && raw[0] == 0x89 && raw[1] == 0x50 {
+			ext = ".png"
+		}
+		if err := os.MkdirAll(coverDir, 0755); err != nil {
+			return
+		}
+		coverPath = filepath.Join(coverDir, "cover"+ext)
+		if err := os.WriteFile(coverPath, raw, 0644); err != nil {
+			coverPath = ""
+		}
+		break
+	}
+
+	return
 }
 
 func ExtractCBZCover(cbzPath, coverDir string) string {

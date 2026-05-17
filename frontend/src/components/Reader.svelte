@@ -445,10 +445,9 @@
         draw(Overlayer.highlight, { color });
       });
 
-      const extMap = { epub: ".epub", mobi: ".mobi", fb2: ".fb2", cbz: ".cbz" };
+      const extMap = { epub: ".epub", fb2: ".fb2", cbz: ".cbz" };
       const mimeMap = {
         epub: "application/epub+zip",
-        mobi: "application/x-mobipocket-ebook",
         fb2: "application/x-fictionbook+xml",
         cbz: "application/vnd.comicbook+zip",
       };

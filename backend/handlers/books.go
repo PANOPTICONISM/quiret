@@ -41,8 +41,6 @@ func UploadBook(w http.ResponseWriter, r *http.Request) {
 	supportedTypes := map[string]string{
 		".epub": "epub",
 		".pdf":  "pdf",
-		".mobi": "mobi",
-		".azw3": "azw3",
 		".fb2":  "fb2",
 		".cbz":  "cbz",
 	}
@@ -89,6 +87,8 @@ func UploadBook(w http.ResponseWriter, r *http.Request) {
 		title = originalName
 		author = ""
 		coverPath = ExtractCBZCover(filePath, storageDir)
+	case "fb2":
+		title, author, coverPath = ExtractFB2Metadata(filePath, storageDir, originalName)
 	default:
 		title = originalName
 		author = ""
@@ -214,7 +214,6 @@ func ServeBookFile(w http.ResponseWriter, r *http.Request) {
 	contentTypes := map[string]string{
 		"epub": "application/epub+zip",
 		"pdf":  "application/pdf",
-		"mobi": "application/x-mobipocket-ebook",
 		"fb2":  "application/x-fictionbook+xml",
 		"cbz":  "application/vnd.comicbook+zip",
 	}
