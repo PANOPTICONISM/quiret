@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"quiret/db"
-	"quiret/models"
 	"database/sql"
 	"encoding/json"
 	"io"
@@ -10,6 +8,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"quiret/db"
+	"quiret/models"
 	"strings"
 	"time"
 
@@ -17,7 +17,34 @@ import (
 	"github.com/gorilla/mux"
 )
 
-var DataPath string
+var (
+	DataPath  string
+	BooksPath string
+)
+
+func isPathAllowed(filePath string) bool {
+	absFilePath, err := filepath.Abs(filePath)
+	if err != nil {
+		return false
+	}
+	for _, root := range []string{DataPath, BooksPath} {
+		if root == "" {
+			continue
+		}
+		absRoot, err := filepath.Abs(root)
+		if err != nil {
+			continue
+		}
+		rel, err := filepath.Rel(absRoot, absFilePath)
+		if err != nil {
+			continue
+		}
+		if !strings.HasPrefix(rel, "..") {
+			return true
+		}
+	}
+	return false
+}
 
 func UploadBook(w http.ResponseWriter, r *http.Request) {
 	err := r.ParseMultipartForm(100 << 20) // 100MB max
@@ -28,16 +55,14 @@ func UploadBook(w http.ResponseWriter, r *http.Request) {
 
 	file, header, err := r.FormFile("book")
 	if err != nil {
-		// Try legacy field name for backwards compatibility
-		file, header, err = r.FormFile("epub")
-		if err != nil {
-			http.Error(w, "Failed to read file", http.StatusBadRequest)
-			return
-		}
+		http.Error(w, "Failed to read file", http.StatusBadRequest)
+		return
 	}
 	defer file.Close()
 
-	fileExt := strings.ToLower(filepath.Ext(header.Filename))
+	safeFilename := filepath.Base(header.Filename)
+
+	fileExt := strings.ToLower(filepath.Ext(safeFilename))
 	supportedTypes := map[string]string{
 		".epub": "epub",
 		".pdf":  "pdf",
@@ -58,7 +83,7 @@ func UploadBook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filePath := filepath.Join(storageDir, header.Filename)
+	filePath := filepath.Join(storageDir, safeFilename)
 	dst, err := os.Create(filePath)
 	if err != nil {
 		http.Error(w, "Failed to save file", http.StatusInternalServerError)
@@ -74,7 +99,7 @@ func UploadBook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get original filename without extension for title fallback
-	originalName := strings.TrimSuffix(header.Filename, filepath.Ext(header.Filename))
+	originalName := strings.TrimSuffix(safeFilename, filepath.Ext(safeFilename))
 
 	var title, author, coverPath string
 	switch fileType {
@@ -210,6 +235,12 @@ func ServeBookFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !isPathAllowed(filePath) {
+		log.Printf("Refusing to serve book file outside allowed roots: %s", filePath)
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+
 	// Set appropriate content type based on file type
 	contentTypes := map[string]string{
 		"epub": "application/epub+zip",
@@ -234,6 +265,12 @@ func ServeCover(w http.ResponseWriter, r *http.Request) {
 	err := db.DB.QueryRow("SELECT cover_path FROM books WHERE id = ?", bookID).Scan(&coverPath)
 	if err != nil || coverPath == "" {
 		http.Error(w, "Cover not found", http.StatusNotFound)
+		return
+	}
+
+	if !isPathAllowed(coverPath) {
+		log.Printf("Refusing to serve cover outside allowed roots: %s", coverPath)
+		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
 

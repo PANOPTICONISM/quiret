@@ -415,8 +415,8 @@
               ${
                 isDark
                   ? `
-              * { color: #e2e8f0 !important; }
-              a { color: #63b3ed !important; }
+              * { color: #E8EDF5 !important; }
+              a { color: #8FB0D8 !important; }
               `
                   : ""
               }

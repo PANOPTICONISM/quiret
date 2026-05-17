@@ -40,6 +40,7 @@ func main() {
 	booksPath = absBooksPath
 
 	handlers.DataPath = dataPath
+	handlers.BooksPath = booksPath
 
 	if err := os.MkdirAll(dataPath, 0755); err != nil {
 		log.Fatal("Failed to create data directory:", err)

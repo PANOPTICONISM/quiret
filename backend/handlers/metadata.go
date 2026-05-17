@@ -132,6 +132,10 @@ func ExtractEPUBMetadata(epubPath, coverDir, fallbackTitle string) (title, autho
 		return
 	}
 
+	if strings.Contains(coverHref, "..") {
+		return
+	}
+
 	var coverInZip string
 	if opfDir != "" && opfDir != "." {
 		coverInZip = filepath.Join(opfDir, coverHref)
