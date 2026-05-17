@@ -1,7 +1,7 @@
 services:
   app:
     build: .
-    container_name: bookland
+    container_name: quiret
     ports:
       - "${PORT:-8080}:${PORT:-8080}"
     restart: unless-stopped

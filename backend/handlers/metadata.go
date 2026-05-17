@@ -286,7 +286,7 @@ func ExtractPDFMetadata(pdfPath, originalName string) (title, author string) {
 
 // ExtractPDFCover extracts the first page of a PDF as a JPEG cover image using pdftoppm.
 func ExtractPDFCover(pdfPath, coverDir, bookID string) string {
-	tempBase := filepath.Join(os.TempDir(), "bookland-pdf-"+bookID)
+	tempBase := filepath.Join(os.TempDir(), "quiret-pdf-"+bookID)
 	tempCover := tempBase + "-001.jpg"
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

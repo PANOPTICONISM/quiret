@@ -1,8 +1,8 @@
 package main
 
 import (
-	"bookland/db"
-	"bookland/handlers"
+	"quiret/db"
+	"quiret/handlers"
 	"log"
 	"net/http"
 	"os"

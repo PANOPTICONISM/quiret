@@ -1,8 +1,8 @@
 package handlers
 
 import (
-	"bookland/db"
-	"bookland/models"
+	"quiret/db"
+	"quiret/models"
 	"database/sql"
 	"encoding/json"
 	"io"

@@ -1,44 +1,45 @@
-# Bookland - A performant, low power library for your books
+# Quiret
 
-Made with Go and Svelte.
+A minimal, low-footprint ebook server for your home server.
 
-## Features
+## Pros
 
-- Upload and manage EPUB and PDF files
-- Fast, responsive reader with Foliate-js (EPUB) and PDF.js (PDF)
-- Automatic metadata extraction (title, author, cover)
-- Auto-scan books from a mounted directory on startup
-- Clean, minimal UI
-- Single Docker container deployment
-- Persistent storage with volumes
+- **~30MB Docker image**, low idle RAM — designed for a Pi, NAS, or any low-power box
+- **One static Go binary, one SQLite file** — no external services, no background workers
+- **No Calibre, no JVM, no Node at runtime** — `poppler-utils` is the only system dependency
+- **EPUB reading** via Foliate-js; PDF via PDF.js; CBZ comics supported
+- **Auto-extracted covers and metadata** for EPUB, PDF, and CBZ (MOBI/AZW3/FB2 open in the reader with filename-only metadata)
+- **Annotations, reading progress, drag-and-drop upload, folder auto-scan**
 
 ## Tech Stack
 
 **Backend:**
-- Go (fast, efficient)
-- SQLite (metadata storage)
-- Gorilla Mux (routing)
+- Go
+- SQLite
+- Gorilla Mux
 
 **Frontend:**
-- Svelte (reactive, compiled)
-- Foliate-js (EPUB rendering)
-- PDF.js (PDF rendering)
-- Vite (build tool)
+- Svelte
+- Foliate-js
+- Vite
 
-## Self-Hosting with Docker
+## Self-hosting with Docker
 
 1. Clone this repository:
    ```bash
    git clone <repo-url>
-   cd bookland
+   cd quiret
    ```
 
-2. Start the application:
+2. Create an `.env` file at the root, using `.env.example` as an example
+
+3. Start the application:
    ```bash
+   docker-compose build
    docker-compose up -d
    ```
 
-3. Open your browser:
+4. Open your browser:
    ```
    http://localhost:8080
    ```
@@ -49,36 +50,18 @@ That's it! Your books are stored in a Docker volume and persist between restarts
 
 1. **Upload Books**: Drag and drop EPUB or PDF files, or click the upload area
 2. **Auto-import**: Place books in `BOOKS_PATH` and they'll be scanned on startup
-3. **View Library**: See all your books with covers in a grid
+3. **View Library**: See all your books with covers in a single place
 4. **Read**: Click any book to open the reader
 5. **Navigate**: Use arrow keys or swipe to turn pages
+6. **Annotations**: Select text to highlight content, add notes and return to it later
 
-## File Structure
-
-```
-bookland/
-├── backend/              # Go API server
-│   ├── main.go          # Entry point
-│   ├── handlers/        # HTTP handlers
-│   ├── models/          # Data models
-│   └── db/              # Database setup
-├── frontend/            # Svelte app
-│   └── src/
-│       ├── App.svelte
-│       └── components/
-│           ├── Library.svelte
-│           └── Reader.svelte
-├── Dockerfile
-├── docker-compose.yml
-└── README.md
-```
 
 ## Development
 
 **Backend:**
 ```bash
 cd backend
-DATA_PATH=./data BOOKS_PATH=~/Downloads go run .
+go run .
 ```
 
 **Frontend:**
@@ -88,32 +71,14 @@ npm install
 npm run dev
 ```
 
-The frontend dev server proxies `/api` requests to `localhost:8080`.
-
 ## Configuration
 
 **Environment Variables:**
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `DATA_PATH` | Where database and covers are stored | `./data` |
-| `BOOKS_PATH` | Where to scan for book files (can be read-only) | `DATA_PATH/books` |
-| `PORT` | Server port | `8080` |
-| `STATIC_PATH` | Path to built frontend (production only) | - |
-
-## Storage
-
-- **DATA_PATH**: Contains the SQLite database and extracted covers. Must be writable.
-- **BOOKS_PATH**: Source directory for book files. Scanned on startup. Can be read-only.
-
-In Docker, `DATA_PATH` uses a named volume (`book-data`) while `BOOKS_PATH` can be mounted from your host (e.g., `/home/user/books`).
-
-## Performance
-
-- **Small Docker image**: ~30MB Alpine-based
-- **Fast uploads**: Go handles EPUB processing efficiently
-- **Smooth reading**: Foliate-js provides native-like pagination
-- **Low memory**: Optimized for self-hosting on modest hardware (Raspberry Pi compatible)
+| `DATA_PATH` | Where database and books/covers are stored | `./data` |
+| `BOOKS_PATH` | Where to scan for book files (can be read-only) | `/path/to/your/books`
 
 ## License
 

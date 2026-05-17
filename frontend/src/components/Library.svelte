@@ -132,7 +132,7 @@
 
 <div class="container">
   <header>
-    <h1>My Library</h1>
+    <h1>Quiret</h1>
     <button
       class="dark-mode-toggle"
       onclick={toggleDarkMode}

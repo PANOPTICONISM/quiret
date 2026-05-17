@@ -393,7 +393,7 @@
 
             const isDark = document.documentElement.classList.contains("dark");
             const style = doc.createElement("style");
-            style.id = "bookland-font-style";
+            style.id = "quiret-font-style";
             style.textContent = `
               p, div, span, li, td, th {
                 font-size: ${fontSize}px !important;
@@ -495,7 +495,7 @@
   $effect(() => {
     const currentSize = fontSize;
     if (epubContentDoc && TEXT_FORMATS.includes(bookMetadata?.fileType)) {
-      const style = epubContentDoc.getElementById("bookland-font-style");
+      const style = epubContentDoc.getElementById("quiret-font-style");
       if (style) {
         style.textContent = style.textContent.replace(
           /font-size:\s*\d+px/g,
