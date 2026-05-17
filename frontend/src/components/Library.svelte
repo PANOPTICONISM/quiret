@@ -1,18 +1,61 @@
 <script>
   import { onMount } from "svelte";
-  import { SUPPORTED_EXTENSIONS, FILE_ACCEPT, FOLIATE_FORMATS } from "../lib/constants.js";
+  import {
+    SUPPORTED_EXTENSIONS,
+    FILE_ACCEPT,
+    FOLIATE_FORMATS,
+  } from "../lib/constants.js";
 
   let { onOpenBook } = $props();
 
   let books = $state([]);
   let uploading = $state(false);
-  let dragOver = $state(false);
   let darkMode = $state(false);
+  let searchQuery = $state("");
+  let sortBy = $state("added");
+  let dragDepth = $state(0);
 
-  onMount(async () => {
+  const isDragging = $derived(dragDepth > 0);
+
+  const filteredBooks = $derived.by(() => {
+    const q = searchQuery.trim().toLowerCase();
+    let list = books;
+    if (q) {
+      list = list.filter(
+        (b) =>
+          b.title?.toLowerCase().includes(q) ||
+          b.author?.toLowerCase().includes(q),
+      );
+    }
+    if (sortBy === "title") {
+      return [...list].sort((a, b) =>
+        (a.title || "").localeCompare(b.title || ""),
+      );
+    }
+    if (sortBy === "author") {
+      return [...list].sort((a, b) =>
+        (a.author || "").localeCompare(b.author || ""),
+      );
+    }
+    return list;
+  });
+
+  onMount(() => {
     darkMode = localStorage.getItem("darkMode") === "true";
     applyDarkMode(darkMode);
-    await fetchBooks();
+    fetchBooks();
+
+    document.addEventListener("dragenter", onDocDragEnter);
+    document.addEventListener("dragleave", onDocDragLeave);
+    document.addEventListener("dragover", onDocDragOver);
+    document.addEventListener("drop", onDocDrop);
+
+    return () => {
+      document.removeEventListener("dragenter", onDocDragEnter);
+      document.removeEventListener("dragleave", onDocDragLeave);
+      document.removeEventListener("dragover", onDocDragOver);
+      document.removeEventListener("drop", onDocDrop);
+    };
   });
 
   const toggleDarkMode = () => {
@@ -36,20 +79,47 @@
     }
   };
 
-  const handleFileSelect = async (event) => {
-    const files = event.target.files || event.dataTransfer?.files;
-    if (!files || files.length === 0) {
-      return;
-    }
+  const isFileDrag = (e) => e.dataTransfer?.types?.includes?.("Files");
 
-    const file = files[0];
+  const onDocDragEnter = (e) => {
+    if (isFileDrag(e)) {
+      e.preventDefault();
+      dragDepth++;
+    }
+  };
+
+  const onDocDragLeave = () => {
+    if (dragDepth > 0) dragDepth--;
+  };
+
+  const onDocDragOver = (e) => {
+    if (isFileDrag(e)) e.preventDefault();
+  };
+
+  const onDocDrop = (e) => {
+    e.preventDefault();
+    dragDepth = 0;
+    const file = e.dataTransfer?.files?.[0];
+    if (file) tryUploadFile(file);
+  };
+
+  const handleFilePicker = async (event) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      await tryUploadFile(file);
+      event.target.value = "";
+    }
+  };
+
+  const tryUploadFile = async (file) => {
     const filename = file.name.toLowerCase();
-    const isSupported = SUPPORTED_EXTENSIONS.some((ext) => filename.endsWith(ext));
+    const isSupported = SUPPORTED_EXTENSIONS.some((ext) =>
+      filename.endsWith(ext),
+    );
     if (!isSupported) {
-      alert("Supported formats: EPUB, PDF, MOBI, FB2, CBZ");
+      alert("Supported formats: EPUB, PDF, FB2, CBZ");
       return;
     }
-
     await uploadBook(file);
   };
 
@@ -77,26 +147,14 @@
     }
   };
 
-  const handleDragOver = (event) => {
-    event.preventDefault();
-    dragOver = true;
-  };
-
-  const handleDragLeave = () => {
-    dragOver = false;
-  };
-
-  const handleDrop = (event) => {
-    event.preventDefault();
-    dragOver = false;
-    handleFileSelect(event);
-  };
-
   const getReadingProgress = (book) => {
     if (!book.readingProgress) return 0;
     try {
       const progress = JSON.parse(book.readingProgress);
-      if (FOLIATE_FORMATS.includes(progress.type) && progress.fraction !== undefined) {
+      if (
+        FOLIATE_FORMATS.includes(progress.type) &&
+        progress.fraction !== undefined
+      ) {
         return Math.round(progress.fraction * 100);
       } else if (progress.type === "pdf" && progress.page && progress.totalPages) {
         return Math.round((progress.page / progress.totalPages) * 100);
@@ -109,9 +167,7 @@
 
   const deleteBook = async (event, bookId, bookTitle) => {
     event.stopPropagation();
-    if (!confirm(`Delete "${bookTitle}"?`)) {
-      return;
-    }
+    if (!confirm(`Delete "${bookTitle}"?`)) return;
 
     try {
       const response = await fetch(`/api/books/${bookId}`, {
@@ -128,90 +184,100 @@
       alert("Failed to delete book");
     }
   };
+
+  const triggerUpload = () => {
+    document.getElementById("file-input")?.click();
+  };
 </script>
 
+<input
+  type="file"
+  accept={FILE_ACCEPT}
+  onchange={handleFilePicker}
+  id="file-input"
+  hidden
+/>
+
 <div class="container">
-  <header>
-    <h1>Quiret</h1>
-    <button
-      class="dark-mode-toggle"
-      onclick={toggleDarkMode}
-      aria-label="Toggle dark mode"
-    >
-      {#if darkMode}
-        <svg
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-        >
-          <circle cx="12" cy="12" r="5" />
-          <line x1="12" y1="1" x2="12" y2="3" />
-          <line x1="12" y1="21" x2="12" y2="23" />
-          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-          <line x1="1" y1="12" x2="3" y2="12" />
-          <line x1="21" y1="12" x2="23" y2="12" />
-          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-        </svg>
-      {:else}
-        <svg
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-        >
-          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-        </svg>
+  <header class="library-header">
+    <div class="brand">
+      <h1>Quiret</h1>
+      {#if books.length > 0}
+        <span class="count">{books.length} {books.length === 1 ? "book" : "books"}</span>
       {/if}
-    </button>
+    </div>
+    <div class="header-actions">
+      {#if books.length > 0}
+        <div class="search">
+          <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="7" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            type="search"
+            placeholder="Search"
+            bind:value={searchQuery}
+            class="search-input"
+          />
+        </div>
+        <div class="select-wrapper">
+          <select class="sort-select" bind:value={sortBy} aria-label="Sort books">
+            <option value="added">Recently added</option>
+            <option value="title">Title</option>
+            <option value="author">Author</option>
+          </select>
+          <svg class="select-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </div>
+      {/if}
+      <button
+        class="upload-btn"
+        onclick={triggerUpload}
+        disabled={uploading}
+      >
+        {#if uploading}
+          <span class="spinner-sm"></span>
+          Uploading
+        {:else}
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="17 8 12 3 7 8" />
+            <line x1="12" y1="3" x2="12" y2="15" />
+          </svg>
+          Upload
+        {/if}
+      </button>
+      <button
+        class="icon-btn"
+        onclick={toggleDarkMode}
+        aria-label="Toggle dark mode"
+      >
+        {#if darkMode}
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="5" />
+            <line x1="12" y1="1" x2="12" y2="3" />
+            <line x1="12" y1="21" x2="12" y2="23" />
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+            <line x1="1" y1="12" x2="3" y2="12" />
+            <line x1="21" y1="12" x2="23" y2="12" />
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+          </svg>
+        {:else}
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+          </svg>
+        {/if}
+      </button>
+    </div>
   </header>
-  <div
-    class="upload-zone"
-    class:drag-over={dragOver}
-    ondragover={handleDragOver}
-    ondragleave={handleDragLeave}
-    ondrop={handleDrop}
-    role="button"
-    tabindex="0"
-  >
-    <input
-      type="file"
-      accept={FILE_ACCEPT}
-      onchange={handleFileSelect}
-      id="file-input"
-      style="display: none;"
-    />
-    <label for="file-input">
-      {#if uploading}
-        <div class="spinner"></div>
-        <p>Uploading...</p>
-      {:else}
-        <svg
-          width="48"
-          height="48"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-        >
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-          <polyline points="17 8 12 3 7 8" />
-          <line x1="12" y1="3" x2="12" y2="15" />
-        </svg>
-        <p>Drop your book here or click to upload</p>
-      {/if}
-    </label>
-  </div>
-  {#if books.length > 0}
+
+  {#if filteredBooks.length > 0}
     <div class="books-grid">
-      {#each books as book (book.id)}
-        <div class="book-card">
+      {#each filteredBooks as book (book.id)}
+        <article class="book-card">
           <button
             type="button"
             class="book-card-main"
@@ -219,29 +285,24 @@
           >
             <div class="cover-container">
               {#if book.coverPath}
-                <img src="/api/books/{book.id}/cover" alt={book.title} />
+                <img
+                  src="/api/books/{book.id}/cover"
+                  alt={book.title}
+                  loading="lazy"
+                />
               {:else}
                 <div class="no-cover">
-                  <svg
-                    width="48"
-                    height="48"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                  >
-                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                    <path
-                      d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"
-                    />
-                  </svg>
+                  <span class="no-cover-title">{book.title}</span>
                 </div>
               {/if}
-              <span class="file-type-tag" class:pdf={book.fileType === "pdf"}>
+              <span class="file-type-tag">
                 {book.fileType?.toUpperCase() || "EPUB"}
               </span>
               {#if getReadingProgress(book) > 0}
-                <div class="progress-indicator">
+                <div
+                  class="progress-indicator"
+                  aria-label="Reading progress"
+                >
                   <div
                     class="progress-fill"
                     style="width: {getReadingProgress(book)}%"
@@ -251,7 +312,7 @@
             </div>
             <div class="book-info">
               <h3>{book.title}</h3>
-              <p>{book.author}</p>
+              <p>{book.author || "Unknown"}</p>
             </div>
           </button>
           <button
@@ -260,214 +321,301 @@
             onclick={(e) => deleteBook(e, book.id, book.title)}
             aria-label="Delete book"
           >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path
-                d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
-              />
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M18 6L6 18M6 6l12 12" />
             </svg>
           </button>
-        </div>
+        </article>
       {/each}
     </div>
-  {:else}
+  {:else if books.length > 0}
     <div class="empty-state">
-      <svg
-        width="64"
-        height="64"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.5"
-      >
-        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-        <path
-          d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"
-        />
-      </svg>
-      <p>No books yet. Upload your first book!</p>
+      <p>No books match "{searchQuery}"</p>
+    </div>
+  {:else}
+    <div class="empty-state empty-state-onboard">
+      <h2>Your library is empty</h2>
+      <p>Drop an EPUB, PDF, FB2, or CBZ anywhere on this page — or pick one to upload.</p>
+      <button class="upload-btn primary" onclick={triggerUpload}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="17 8 12 3 7 8" />
+          <line x1="12" y1="3" x2="12" y2="15" />
+        </svg>
+        Upload your first book
+      </button>
     </div>
   {/if}
 </div>
+
+{#if isDragging}
+  <div class="drop-overlay" aria-hidden="true">
+    <div class="drop-overlay-inner">
+      <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+        <polyline points="17 8 12 3 7 8" />
+        <line x1="12" y1="3" x2="12" y2="15" />
+      </svg>
+      <p>Drop to add to your library</p>
+    </div>
+  </div>
+{/if}
 
 <style>
   .container {
     max-width: 1200px;
     margin: 0 auto;
-    padding: 2rem;
+    padding: 2.5rem 2rem 4rem;
   }
 
-  header {
-    margin-bottom: 2rem;
+  .library-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 1.5rem;
+    margin-bottom: 2.5rem;
+    flex-wrap: wrap;
+  }
+
+  .brand {
+    display: flex;
+    align-items: baseline;
+    gap: 0.85rem;
   }
 
   h1 {
-    font-size: 2rem;
-    font-weight: 600;
-    color: #1a1a1a;
+    font-family: var(--font-serif);
+    font-size: 2.25rem;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    color: var(--text);
+    line-height: 1;
   }
 
-  :global(.dark) h1 {
-    color: #f7fafc;
+  .count {
+    font-size: 0.85rem;
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
   }
 
-  .dark-mode-toggle {
-    background: none;
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .search {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .search-icon {
+    position: absolute;
+    left: 0.7rem;
+    color: var(--text);
+    pointer-events: none;
+  }
+
+  .search-input {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.5rem 0.85rem 0.5rem 2.1rem;
+    border-radius: var(--radius);
+    font-size: 0.9rem;
+    line-height: 1.25;
+    width: 180px;
+    font-family: inherit;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+
+  .search-input::placeholder {
+    color: var(--text);
+  }
+
+  .search-input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+
+  .select-wrapper {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .sort-select {
+    appearance: none;
+    -webkit-appearance: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.5rem 2.1rem 0.5rem 0.85rem;
+    border-radius: var(--radius);
+    font-size: 0.9rem;
+    line-height: 1.25;
+    font-family: inherit;
+    cursor: pointer;
+  }
+
+  .sort-select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+
+  .select-chevron {
+    position: absolute;
+    right: 0.7rem;
+    color: var(--text-muted);
+    pointer-events: none;
+  }
+
+  .upload-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    background: var(--accent);
+    color: white;
     border: none;
+    padding: 0.5rem 0.95rem;
+    border-radius: var(--radius);
+    font-size: 0.9rem;
+    line-height: 1.25;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .upload-btn:hover:not(:disabled) {
+    background: var(--accent-hover);
+  }
+
+  .upload-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .upload-btn.primary {
+    padding: 0.7rem 1.2rem;
+    font-size: 1rem;
+    margin-top: 1.5rem;
+  }
+
+  .icon-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
     cursor: pointer;
     padding: 0.5rem;
-    border-radius: 8px;
-    color: #4a5568;
-    transition:
-      background 0.2s,
-      color 0.2s;
-  }
-
-  .dark-mode-toggle:hover {
-    background: #e2e8f0;
-  }
-
-  :global(.dark) .dark-mode-toggle {
-    color: #e2e8f0;
-  }
-
-  :global(.dark) .dark-mode-toggle:hover {
-    background: #4a5568;
-  }
-
-  .upload-zone {
-    border: 2px dashed #cbd5e0;
-    border-radius: 12px;
-    padding: 3rem;
-    text-align: center;
-    margin-bottom: 3rem;
-    background: white;
-    transition: all 0.2s;
-    cursor: pointer;
-  }
-
-  .upload-zone:hover,
-  .upload-zone.drag-over {
-    border-color: #4299e1;
-    background: #ebf8ff;
-  }
-
-  .upload-zone label {
-    cursor: pointer;
-    display: flex;
-    flex-direction: column;
+    border-radius: var(--radius);
+    display: inline-flex;
     align-items: center;
-    gap: 1rem;
-    color: #4a5568;
+    justify-content: center;
+    transition: background 0.15s, color 0.15s;
   }
 
-  .spinner {
-    width: 48px;
-    height: 48px;
-    border: 4px solid #e2e8f0;
-    border-top-color: #4299e1;
+  .icon-btn:hover {
+    background: var(--surface);
+    color: var(--text);
+  }
+
+  .spinner-sm {
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: white;
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
+    display: inline-block;
   }
 
   @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
+    to { transform: rotate(360deg); }
   }
 
   .books-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    gap: 1.5rem;
+    gap: 2.25rem 1.25rem;
   }
 
   .book-card {
     position: relative;
-    border-radius: 8px;
-    overflow: hidden;
-    background: white;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    transition:
-      transform 0.2s,
-      box-shadow 0.2s;
+    transition: transform 0.15s;
   }
 
   .book-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+    transform: translateY(-2px);
   }
 
   .book-card-main {
+    display: block;
+    width: 100%;
     cursor: pointer;
     border: none;
     padding: 0;
     background: none;
-    width: 100%;
     text-align: left;
-  }
-
-  .delete-btn {
-    position: absolute;
-    top: 8px;
-    left: 8px;
-    background: rgba(220, 38, 38, 0.9);
-    border: none;
-    border-radius: 4px;
-    padding: 6px;
-    cursor: pointer;
-    color: white;
-    opacity: 0;
-    transition: opacity 0.2s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .book-card:hover .delete-btn {
-    opacity: 1;
-  }
-
-  .delete-btn:hover {
-    background: rgba(185, 28, 28, 1);
+    font-family: inherit;
+    color: inherit;
   }
 
   .cover-container {
     position: relative;
+    aspect-ratio: 2 / 3;
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: var(--surface-muted);
+    box-shadow: var(--shadow);
+    border: 1px solid var(--border);
   }
 
   .book-card img {
     width: 100%;
-    height: 240px;
+    height: 100%;
     object-fit: cover;
     display: block;
   }
 
-  .file-type-tag {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    background: rgba(102, 126, 234, 0.9);
-    color: white;
-    font-size: 0.65rem;
-    font-weight: 600;
-    padding: 3px 6px;
-    border-radius: 4px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+  .no-cover {
+    width: 100%;
+    height: 100%;
+    background: var(--surface-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    color: var(--text);
   }
 
-  .file-type-tag.pdf {
-    background: rgba(229, 62, 62, 0.9);
+  .no-cover-title {
+    font-family: var(--font-serif);
+    font-size: 1rem;
+    line-height: 1.3;
+    text-align: center;
+    display: -webkit-box;
+    -webkit-line-clamp: 6;
+    line-clamp: 6;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .file-type-tag {
+    position: absolute;
+    bottom: 0.5rem;
+    left: 0.5rem;
+    background: #D85940;
+    color: #FFFFFF;
+    font-size: 0.6rem;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
   }
 
   .progress-indicator {
@@ -476,42 +624,64 @@
     left: 0;
     right: 0;
     height: 4px;
-    background: rgba(0, 0, 0, 0.3);
+    background: var(--progress-track);
   }
 
   .progress-fill {
     height: 100%;
-    background: #48bb78;
+    background: var(--accent);
     transition: width 0.3s ease;
   }
 
-  .no-cover {
-    width: 100%;
-    height: 240px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  .delete-btn {
+    position: absolute;
+    top: 0.4rem;
+    right: 0.4rem;
+    background: rgba(28, 26, 23, 0.75);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s, background 0.15s;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: white;
+  }
+
+  .book-card:hover .delete-btn,
+  .delete-btn:focus-visible {
+    opacity: 1;
+  }
+
+  .delete-btn:hover {
+    background: var(--danger);
   }
 
   .book-info {
-    padding: 1rem;
+    padding: 0.85rem 0.25rem 0;
   }
 
   .book-info h3 {
-    font-size: 0.95rem;
-    font-weight: 600;
-    margin-bottom: 0.25rem;
-    color: #1a1a1a;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text);
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    margin-bottom: 0.2rem;
   }
 
   .book-info p {
-    font-size: 0.85rem;
-    color: #718096;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-style: italic;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -519,47 +689,75 @@
 
   .empty-state {
     text-align: center;
-    padding: 2rem;
-    color: #a0aec0;
+    padding: 3rem 1rem;
+    color: var(--text-muted);
   }
 
-  .empty-state svg {
-    margin-bottom: 1rem;
+  .empty-state-onboard {
+    padding: 6rem 1rem;
   }
 
-  .empty-state p {
+  .empty-state-onboard h2 {
+    font-family: var(--font-serif);
+    font-size: 1.6rem;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 0.5rem;
+  }
+
+  .empty-state-onboard p {
+    color: var(--text-muted);
+  }
+
+  .drop-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--drop-overlay-bg);
+    backdrop-filter: blur(2px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    pointer-events: none;
+    animation: fadeIn 0.15s ease-out;
+  }
+
+  .drop-overlay-inner {
+    background: var(--surface);
+    color: var(--accent);
+    padding: 2rem 3rem;
+    border-radius: var(--radius-lg);
+    border: 2px dashed var(--accent);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    box-shadow: var(--shadow);
+  }
+
+  .drop-overlay-inner p {
+    font-family: var(--font-serif);
     font-size: 1.1rem;
+    color: var(--text);
   }
 
-  /* Dark mode styles */
-  :global(.dark) .upload-zone {
-    background: #2d3748;
-    border-color: #4a5568;
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
   }
 
-  :global(.dark) .upload-zone:hover,
-  :global(.dark) .upload-zone.drag-over {
-    border-color: #4299e1;
-    background: #2a4365;
-  }
-
-  :global(.dark) .upload-zone label {
-    color: #a0aec0;
-  }
-
-  :global(.dark) .book-card {
-    background: #2d3748;
-  }
-
-  :global(.dark) .book-info h3 {
-    color: #f7fafc;
-  }
-
-  :global(.dark) .book-info p {
-    color: #a0aec0;
-  }
-
-  :global(.dark) .empty-state {
-    color: #718096;
+  @media (max-width: 600px) {
+    .container {
+      padding: 1.5rem 1rem 3rem;
+    }
+    .library-header {
+      margin-bottom: 1.75rem;
+    }
+    .search-input { width: 130px; }
+    h1 { font-size: 1.85rem; }
+    .books-grid {
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 1.75rem 1rem;
+    }
   }
 </style>

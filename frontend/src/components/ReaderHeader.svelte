@@ -154,10 +154,10 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 1rem 2rem;
-    background: rgba(245, 241, 232, 0.95);
+    padding: 0.9rem 1.75rem;
+    background: var(--reader-header-bg);
     backdrop-filter: blur(8px);
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid var(--border);
     z-index: 1001;
     transform: translateY(0);
     transition: transform 0.3s ease-in-out;
@@ -174,46 +174,54 @@
     background: none;
     border: none;
     cursor: pointer;
-    font-size: 1rem;
-    color: #4a5568;
-    padding: 0.5rem 1rem;
-    border-radius: 6px;
-    transition: background 0.2s;
+    font-size: 0.95rem;
+    color: var(--text-muted);
+    padding: 0.45rem 0.85rem;
+    border-radius: var(--radius);
+    font-family: inherit;
+    transition: background 0.15s, color 0.15s;
   }
 
   .close-btn:hover {
-    background: #e8e2d0;
+    background: var(--tint);
+    color: var(--text);
   }
 
   .header-controls {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.4rem;
   }
 
-  .annotations-btn {
-    position: relative;
+  .annotations-btn,
+  .fullscreen-btn {
     background: none;
     border: none;
     cursor: pointer;
     padding: 0.5rem;
-    border-radius: 6px;
-    color: #4a5568;
-    transition: background 0.2s;
+    border-radius: var(--radius);
+    color: var(--text-muted);
+    transition: background 0.15s, color 0.15s;
     display: flex;
     align-items: center;
     justify-content: center;
   }
 
-  .annotations-btn:hover {
-    background: #e8e2d0;
+  .annotations-btn {
+    position: relative;
+  }
+
+  .annotations-btn:hover,
+  .fullscreen-btn:hover {
+    background: var(--tint);
+    color: var(--text);
   }
 
   .annotation-count {
     position: absolute;
     top: 0;
     right: 0;
-    background: #4299e1;
+    background: var(--accent);
     color: white;
     font-size: 0.65rem;
     font-weight: 600;
@@ -221,15 +229,16 @@
     border-radius: 10px;
     min-width: 16px;
     text-align: center;
+    font-variant-numeric: tabular-nums;
   }
 
   .font-size-controls {
     display: flex;
     align-items: center;
     gap: 0.25rem;
-    background: rgba(0, 0, 0, 0.05);
+    background: var(--tint);
     padding: 0.25rem;
-    border-radius: 6px;
+    border-radius: var(--radius);
   }
 
   .font-btn {
@@ -237,16 +246,17 @@
     border: none;
     cursor: pointer;
     padding: 0.35rem;
-    border-radius: 4px;
-    color: #4a5568;
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background 0.2s;
+    transition: background 0.15s, color 0.15s;
   }
 
   .font-btn:hover:not(:disabled) {
-    background: rgba(0, 0, 0, 0.1);
+    background: var(--tint-strong);
+    color: var(--text);
   }
 
   .font-btn:disabled {
@@ -256,70 +266,9 @@
 
   .font-size-label {
     font-size: 0.8rem;
-    color: #4a5568;
+    color: var(--text-muted);
     min-width: 40px;
     text-align: center;
-  }
-
-  .fullscreen-btn {
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 0.5rem;
-    border-radius: 6px;
-    color: #4a5568;
-    transition: background 0.2s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .fullscreen-btn:hover {
-    background: #e8e2d0;
-  }
-
-  :global(.dark) .reader-header {
-    background: rgba(26, 32, 44, 0.95);
-    border-bottom-color: #4a5568;
-  }
-
-  :global(.dark) .close-btn {
-    color: #e2e8f0;
-  }
-
-  :global(.dark) .close-btn:hover {
-    background: #4a5568;
-  }
-
-  :global(.dark) .annotations-btn {
-    color: #e2e8f0;
-  }
-
-  :global(.dark) .annotations-btn:hover {
-    background: #4a5568;
-  }
-
-  :global(.dark) .font-size-controls {
-    background: rgba(255, 255, 255, 0.1);
-  }
-
-  :global(.dark) .font-btn {
-    color: #e2e8f0;
-  }
-
-  :global(.dark) .font-btn:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.15);
-  }
-
-  :global(.dark) .font-size-label {
-    color: #e2e8f0;
-  }
-
-  :global(.dark) .fullscreen-btn {
-    color: #e2e8f0;
-  }
-
-  :global(.dark) .fullscreen-btn:hover {
-    background: #4a5568;
+    font-variant-numeric: tabular-nums;
   }
 </style>

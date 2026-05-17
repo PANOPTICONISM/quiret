@@ -40,7 +40,7 @@
     rows="3"
   ></textarea>
   <button class="save-annotation-btn" onclick={onSave}>
-    Save Highlight
+    Save highlight
   </button>
 </div>
 
@@ -50,21 +50,17 @@
     bottom: 0;
     left: 0;
     right: 0;
-    background: white;
-    border-top: 1px solid #e2e8f0;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
     padding: 1.5rem;
     z-index: 1002;
-    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
     animation: slideUp 0.2s ease-out;
   }
 
   @keyframes slideUp {
-    from {
-      transform: translateY(100%);
-    }
-    to {
-      transform: translateY(0);
-    }
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
   }
 
   .annotation-panel-header {
@@ -76,8 +72,10 @@
 
   .annotation-panel-header h3 {
     margin: 0;
-    font-size: 1.1rem;
-    color: #2d3748;
+    font-family: var(--font-serif);
+    font-size: 1.15rem;
+    font-weight: 500;
+    color: var(--text);
   }
 
   .close-panel-btn {
@@ -85,26 +83,28 @@
     border: none;
     cursor: pointer;
     padding: 0.25rem;
-    color: #718096;
-    border-radius: 4px;
+    color: var(--text-muted);
+    border-radius: var(--radius-sm);
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: background 0.15s, color 0.15s;
   }
 
   .close-panel-btn:hover {
-    background: #f7fafc;
-    color: #4a5568;
+    background: var(--tint);
+    color: var(--text);
   }
 
   .selected-text {
+    font-family: var(--font-serif);
     font-style: italic;
-    color: #4a5568;
-    padding: 0.75rem;
-    background: #f7fafc;
-    border-radius: 6px;
+    color: var(--text-muted);
+    padding: 0.75rem 1rem;
+    background: var(--surface-muted);
+    border-radius: var(--radius);
     margin-bottom: 1rem;
-    font-size: 0.9rem;
+    font-size: 0.95rem;
     line-height: 1.5;
     max-height: 80px;
     overflow: hidden;
@@ -117,12 +117,13 @@
   }
 
   .color-btn {
-    width: 32px;
-    height: 32px;
+    width: 30px;
+    height: 30px;
     border-radius: 50%;
     border: 2px solid transparent;
     cursor: pointer;
     transition: transform 0.15s, border-color 0.15s;
+    padding: 0;
   }
 
   .color-btn:hover {
@@ -130,78 +131,48 @@
   }
 
   .color-btn.selected {
-    border-color: #2d3748;
+    border-color: var(--text);
     transform: scale(1.1);
   }
 
   .annotation-note {
     width: 100%;
     padding: 0.75rem;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: var(--radius);
     font-size: 0.95rem;
     resize: none;
     margin-bottom: 1rem;
     font-family: inherit;
   }
 
+  .annotation-note::placeholder {
+    color: var(--text-faint);
+  }
+
   .annotation-note:focus {
     outline: none;
-    border-color: #4299e1;
-    box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.15);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
   }
 
   .save-annotation-btn {
     width: 100%;
-    padding: 0.75rem;
-    background: #4299e1;
+    padding: 0.7rem;
+    background: var(--accent);
     color: white;
     border: none;
-    border-radius: 6px;
-    font-size: 1rem;
+    border-radius: var(--radius);
+    font-size: 0.95rem;
     cursor: pointer;
     font-weight: 500;
-    transition: background 0.2s;
+    font-family: inherit;
+    transition: background 0.15s;
   }
 
   .save-annotation-btn:hover {
-    background: #3182ce;
-  }
-
-  :global(.dark) .annotation-panel {
-    background: #2d3748;
-    border-top-color: #4a5568;
-  }
-
-  :global(.dark) .annotation-panel-header h3 {
-    color: #e2e8f0;
-  }
-
-  :global(.dark) .close-panel-btn {
-    color: #a0aec0;
-  }
-
-  :global(.dark) .close-panel-btn:hover {
-    background: #4a5568;
-    color: #e2e8f0;
-  }
-
-  :global(.dark) .selected-text {
-    background: #1a202c;
-    color: #e2e8f0;
-  }
-
-  :global(.dark) .color-btn.selected {
-    border-color: #e2e8f0;
-  }
-
-  :global(.dark) .annotation-note {
-    background: #1a202c;
-    border-color: #4a5568;
-    color: #e2e8f0;
-  }
-
-  :global(.dark) .annotation-note:focus {
-    border-color: #4299e1;
+    background: var(--accent-hover);
   }
 </style>

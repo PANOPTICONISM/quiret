@@ -1,13 +1,67 @@
 :root {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  /* warm paper-and-ink palette */
+  --bg: #FAF7F2;
+  --surface: #FFFFFF;
+  --surface-muted: #F0EBE0;
+  --border: #E8E2D0;
+  --border-strong: #D9D1BA;
+  --text: #1C1A17;
+  --text-muted: #6B6357;
+  --text-faint: #9A9286;
+  --accent: #3A4C6B;
+  --accent-hover: #2A3A56;
+  --accent-soft: rgba(58, 76, 107, 0.08);
+  --danger: #9B2C2C;
+  --tint: rgba(0, 0, 0, 0.04);
+  --tint-strong: rgba(0, 0, 0, 0.08);
+  --reader-header-bg: rgba(245, 241, 232, 0.92);
+  --drop-overlay-bg: rgba(28, 26, 23, 0.18);
+  --progress-track: rgba(28, 26, 23, 0.4);
+
+  --shadow-sm: 0 1px 2px rgba(28, 26, 23, 0.04);
+  --shadow: 0 1px 2px rgba(28, 26, 23, 0.04), 0 4px 12px rgba(28, 26, 23, 0.06);
+  --radius-sm: 4px;
+  --radius: 8px;
+  --radius-lg: 12px;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  --font-serif: 'Charter', 'Iowan Old Style', 'Apple Garamond', Baskerville, 'Times New Roman', serif;
+
+  font-family: var(--font-sans);
   line-height: 1.5;
   font-weight: 400;
-  color: #213547;
-  background-color: #f8f9fa;
+  color: var(--text);
+  background-color: var(--bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+.dark {
+  --bg: #161B26;
+  --surface: #1F2632;
+  --surface-muted: #2A3340;
+  --border: #3A4452;
+  --border-strong: #4D5868;
+  --text: #E8EDF5;
+  --text-muted: #B0BBCB;
+  --text-faint: #8A95AE;
+  --accent: #3F608A;
+  --accent-hover: #547BAA;
+  --accent-soft: rgba(63, 96, 138, 0.22);
+  --danger: #E07878;
+  --tint: rgba(255, 255, 255, 0.06);
+  --tint-strong: rgba(255, 255, 255, 0.1);
+  --reader-header-bg: rgba(31, 38, 50, 0.92);
+  --drop-overlay-bg: rgba(58, 76, 107, 0.55);
+  --progress-track: rgba(0, 0, 0, 0.55);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 4px 16px rgba(0, 0, 0, 0.55);
+
+  color: var(--text);
+  background-color: var(--bg);
 }
 
 * {
@@ -19,19 +73,11 @@
 body {
   margin: 0;
   min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
 }
 
 #app {
   width: 100%;
   min-height: 100vh;
-}
-
-/* Dark mode */
-.dark {
-  color: #e2e8f0;
-  background-color: #1a202c;
-}
-
-.dark body {
-  background-color: #1a202c;
 }

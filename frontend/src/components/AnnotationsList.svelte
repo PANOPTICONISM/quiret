@@ -43,22 +43,18 @@
     width: 350px;
     max-width: 90vw;
     height: 100vh;
-    background: white;
-    border-left: 1px solid #e2e8f0;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
     z-index: 1002;
-    box-shadow: -4px 0 20px rgba(0, 0, 0, 0.1);
+    box-shadow: -4px 0 20px rgba(0, 0, 0, 0.08);
     animation: slideIn 0.2s ease-out;
     display: flex;
     flex-direction: column;
   }
 
   @keyframes slideIn {
-    from {
-      transform: translateX(100%);
-    }
-    to {
-      transform: translateX(0);
-    }
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
   }
 
   .panel-header {
@@ -66,13 +62,15 @@
     justify-content: space-between;
     align-items: center;
     padding: 1rem 1.5rem;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid var(--border);
   }
 
   .panel-header h3 {
     margin: 0;
-    font-size: 1.1rem;
-    color: #2d3748;
+    font-family: var(--font-serif);
+    font-size: 1.15rem;
+    font-weight: 500;
+    color: var(--text);
   }
 
   .close-panel-btn {
@@ -80,16 +78,17 @@
     border: none;
     cursor: pointer;
     padding: 0.25rem;
-    color: #718096;
-    border-radius: 4px;
+    color: var(--text-muted);
+    border-radius: var(--radius-sm);
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: background 0.15s, color 0.15s;
   }
 
   .close-panel-btn:hover {
-    background: #f7fafc;
-    color: #4a5568;
+    background: var(--tint);
+    color: var(--text);
   }
 
   .annotations-list {
@@ -99,105 +98,64 @@
   }
 
   .no-annotations {
-    color: #718096;
+    color: var(--text-muted);
     text-align: center;
     padding: 2rem 1rem;
     font-size: 0.9rem;
   }
 
   .annotation-item {
-    padding: 0.75rem;
-    border-left: 4px solid yellow;
-    background: #f7fafc;
-    border-radius: 0 6px 6px 0;
+    padding: 0.75rem 0.85rem;
+    border-left: 3px solid yellow;
+    background: var(--surface-muted);
+    border-radius: 0 var(--radius) var(--radius) 0;
     margin-bottom: 0.75rem;
   }
 
   .annotation-text {
-    font-size: 0.9rem;
-    color: #4a5568;
+    font-family: var(--font-serif);
+    font-size: 0.95rem;
+    color: var(--text);
     line-height: 1.5;
     font-style: italic;
   }
 
   .annotation-item-note {
     font-size: 0.85rem;
-    color: #718096;
+    color: var(--text-muted);
     margin-top: 0.5rem;
     padding-top: 0.5rem;
-    border-top: 1px dashed #e2e8f0;
+    border-top: 1px dashed var(--border);
   }
 
   .annotation-actions {
     display: flex;
-    gap: 0.5rem;
+    gap: 0.4rem;
     margin-top: 0.75rem;
   }
 
   .go-to-btn,
   .delete-btn {
-    padding: 0.35rem 0.75rem;
+    padding: 0.35rem 0.7rem;
     font-size: 0.8rem;
-    border: none;
-    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-muted);
+    border-radius: var(--radius-sm);
     cursor: pointer;
-    transition: background 0.2s;
-  }
-
-  .go-to-btn {
-    background: #4299e1;
-    color: white;
+    font-family: inherit;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
   }
 
   .go-to-btn:hover {
-    background: #3182ce;
-  }
-
-  .delete-btn {
-    background: #fc8181;
+    background: var(--accent);
     color: white;
+    border-color: var(--accent);
   }
 
   .delete-btn:hover {
-    background: #f56565;
-  }
-
-  :global(.dark) .annotations-list-panel {
-    background: #2d3748;
-    border-left-color: #4a5568;
-  }
-
-  :global(.dark) .panel-header {
-    border-bottom-color: #4a5568;
-  }
-
-  :global(.dark) .panel-header h3 {
-    color: #e2e8f0;
-  }
-
-  :global(.dark) .close-panel-btn {
-    color: #a0aec0;
-  }
-
-  :global(.dark) .close-panel-btn:hover {
-    background: #4a5568;
-    color: #e2e8f0;
-  }
-
-  :global(.dark) .no-annotations {
-    color: #a0aec0;
-  }
-
-  :global(.dark) .annotation-item {
-    background: #1a202c;
-  }
-
-  :global(.dark) .annotation-text {
-    color: #e2e8f0;
-  }
-
-  :global(.dark) .annotation-item-note {
-    color: #a0aec0;
-    border-top-color: #4a5568;
+    background: var(--danger);
+    color: white;
+    border-color: var(--danger);
   }
 </style>

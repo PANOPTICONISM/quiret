@@ -578,17 +578,13 @@
 </div>
 
 <style>
-  :root {
-    --background-color: #f5f1e8;
-  }
-
   .reader-wrapper {
     position: fixed;
     top: 0;
     left: 0;
     width: 100vw;
     height: 100vh;
-    background: var(--background-color);
+    background: var(--bg);
     display: flex;
     flex-direction: column;
     z-index: 1000;
@@ -623,33 +619,36 @@
     align-items: center;
     justify-content: center;
     gap: 1rem;
-    color: #4a5568;
+    color: var(--text-muted);
     padding-top: 4rem;
   }
 
   .spinner {
-    width: 48px;
-    height: 48px;
-    border: 4px solid #e2e8f0;
-    border-top-color: #4299e1;
+    width: 40px;
+    height: 40px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
   }
 
   @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
+    to { transform: rotate(360deg); }
   }
 
   .error button {
-    padding: 0.75rem 1.5rem;
-    background: #4299e1;
+    padding: 0.65rem 1.25rem;
+    background: var(--accent);
     color: white;
     border: none;
-    border-radius: 6px;
+    border-radius: var(--radius);
     cursor: pointer;
-    font-size: 1rem;
+    font-size: 0.95rem;
+    font-family: inherit;
+  }
+
+  .error button:hover {
+    background: var(--accent-hover);
   }
 
   .progress-bar {
@@ -657,8 +656,9 @@
     bottom: 1.5rem;
     right: 1.5rem;
     font-size: 0.85rem;
-    color: #718096;
+    color: var(--text-faint);
     z-index: 1001;
+    font-variant-numeric: tabular-nums;
   }
 
   @media (max-width: 768px) {
@@ -682,24 +682,10 @@
   }
 
   :global(.pdf-text-layer ::selection) {
-    background: rgba(66, 153, 225, 0.5);
+    background: var(--accent-soft);
   }
 
   :global(.pdf-text-layer ::-moz-selection) {
-    background: rgba(66, 153, 225, 0.5);
-  }
-
-  /* Dark mode */
-  :global(.dark) .reader-wrapper {
-    background: #1a202c;
-  }
-
-  :global(.dark) .loading,
-  :global(.dark) .error {
-    color: #a0aec0;
-  }
-
-  :global(.dark) .progress-bar {
-    color: #a0aec0;
+    background: var(--accent-soft);
   }
 </style>
