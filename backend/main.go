@@ -1,13 +1,17 @@
 package main
 
 import (
-	"quiret/db"
-	"quiret/handlers"
+	"context"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"quiret/db"
+	"quiret/handlers"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/joho/godotenv"
@@ -59,6 +63,8 @@ func main() {
 	r.Use(securityMiddleware)
 	r.Use(corsMiddleware)
 
+	r.HandleFunc("/healthz", healthCheck).Methods("GET")
+
 	api := r.PathPrefix("/api").Subrouter()
 	api.HandleFunc("/books", handlers.GetBooks).Methods("GET")
 	api.HandleFunc("/books", handlers.UploadBook).Methods("POST")
@@ -87,8 +93,50 @@ func main() {
 		port = "8080"
 	}
 
-	log.Printf("Server starting on port %s", port)
-	log.Fatal(http.ListenAndServe(":"+port, r))
+	srv := &http.Server{
+		Addr:    ":" + port,
+		Handler: r,
+	}
+
+	serverErr := make(chan error, 1)
+	go func() {
+		log.Printf("Server starting on port %s", port)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			serverErr <- err
+		}
+	}()
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+
+	select {
+	case err := <-serverErr:
+		log.Fatalf("Server failed: %v", err)
+	case sig := <-stop:
+		log.Printf("Received %s, shutting down", sig)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Printf("HTTP server shutdown error: %v", err)
+	}
+	if err := db.DB.Close(); err != nil {
+		log.Printf("Database close error: %v", err)
+	}
+	log.Println("Shutdown complete")
+}
+
+func healthCheck(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+	if err := db.DB.PingContext(ctx); err != nil {
+		http.Error(w, "db unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain")
+	w.Write([]byte("ok"))
 }
 
 func securityMiddleware(next http.Handler) http.Handler {
