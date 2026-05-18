@@ -1,5 +1,5 @@
 <script>
-  import { FOLIATE_FORMATS, TEXT_FORMATS } from "../lib/constants.js";
+  import { TEXT_FORMATS } from "../lib/constants.js";
 
   let {
     visible,
@@ -12,6 +12,7 @@
     isTouchDevice,
     onClose,
     onToggleAnnotations,
+    onBookmarkPage,
     onIncreaseFontSize,
     onDecreaseFontSize,
     onToggleFullscreen,
@@ -53,20 +54,29 @@
     Back to Library
   </button>
   <div class="header-controls">
-    {#if FOLIATE_FORMATS.includes(fileType)}
+    {#if fileType === "cbz"}
       <button
         class="annotations-btn"
-        onclick={onToggleAnnotations}
-        aria-label="View annotations"
+        onclick={onBookmarkPage}
+        aria-label="Bookmark current page"
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
         </svg>
-        {#if annotationsCount > 0}
-          <span class="annotation-count">{annotationsCount}</span>
-        {/if}
       </button>
     {/if}
+    <button
+      class="annotations-btn"
+      onclick={onToggleAnnotations}
+      aria-label="View annotations"
+    >
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+      </svg>
+      {#if annotationsCount > 0}
+        <span class="annotation-count">{annotationsCount}</span>
+      {/if}
+    </button>
     {#if TEXT_FORMATS.includes(fileType)}
       <div class="font-size-controls">
         <button

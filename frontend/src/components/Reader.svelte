@@ -7,6 +7,13 @@
   import AnnotationPanel from "./AnnotationPanel.svelte";
   import AnnotationsList from "./AnnotationsList.svelte";
   import { FOLIATE_FORMATS, TEXT_FORMATS } from "../lib/constants.js";
+  import {
+    drawPDFHighlightsForPage,
+    applyPDFHighlight,
+    removePDFHighlight,
+    goToPDFAnnotation,
+    capturePDFSelection,
+  } from "../lib/pdfAnnotations.js";
 
   let { bookId, onClose } = $props();
 
@@ -37,9 +44,22 @@
   let showAnnotationPanel = $state(false);
   let showAnnotationsList = $state(false);
   let selectedText = $state(null);
-  let selectedCFI = $state(null);
+
+  let selectedPosition = $state(null);
   let annotationNote = $state("");
   let annotationColor = $state("yellow");
+
+  const foliateState = {
+    cfi: null,
+    sectionIndex: null,
+    sectionTotal: null,
+  };
+
+  const pdfState = {
+    textLayer: null,
+    scale: null,
+  };
+  let pdfSelectionTimeout = null;
 
   const anyPanelOpen = $derived(showAnnotationPanel || showAnnotationsList);
 
@@ -49,11 +69,33 @@
     }
   });
 
+  $effect(() => {
+    if (bookMetadata?.fileType !== "pdf") return;
+    document.addEventListener("selectionchange", handlePDFSelectionChange);
+    return () => {
+      document.removeEventListener("selectionchange", handlePDFSelectionChange);
+    };
+  });
+
   const isTouchDevice =
     typeof window !== "undefined" &&
     window.matchMedia("(pointer: coarse)").matches;
 
   pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+
+  const IFRAME_STYLE_ID = "quiret-font-style";
+
+  const buildIframeStyle = ({ fontSize, isDark }) => `
+    p, div, span, li, td, th {
+      font-size: ${fontSize}px !important;
+    }
+    ${
+      isDark
+        ? `* { color: #E8EDF5 !important; }
+           a { color: #8FB0D8 !important; }`
+        : ""
+    }
+  `;
 
   let saveTimeout = null;
   const saveProgress = (progress) => {
@@ -83,14 +125,14 @@
   };
 
   const createAnnotation = async () => {
-    if (!selectedText || !selectedCFI) return;
+    if (!selectedText || !selectedPosition) return;
 
     try {
       const res = await fetch(`/api/books/${bookId}/annotations`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          cfi: selectedCFI,
+          cfi: selectedPosition,
           text: selectedText,
           note: annotationNote,
           color: annotationColor,
@@ -123,18 +165,29 @@
   };
 
   const applyHighlight = (annotation) => {
-    if (!view || !annotation?.cfi) return;
+    if (!annotation?.cfi) return;
+    if (bookMetadata?.fileType === "pdf") {
+      applyPDFHighlight(annotation, pdfState, currentPage);
+      return;
+    }
+    if (!view) return;
     annotationColors.set(annotation.cfi, annotation.color);
     view.addAnnotation({ value: annotation.cfi });
   };
 
   const removeHighlight = (annotation) => {
-    if (!view || !annotation?.cfi) return;
+    if (!annotation?.cfi) return;
+    if (bookMetadata?.fileType === "pdf") {
+      removePDFHighlight(annotation, pdfState);
+      return;
+    }
+    if (!view) return;
     annotationColors.delete(annotation.cfi);
     view.addAnnotation({ value: annotation.cfi }, true);
   };
 
   const applyAllAnnotations = () => {
+    if (bookMetadata?.fileType === "pdf") return;
     if (!view || annotations.length === 0) return;
     for (const annotation of annotations) {
       applyHighlight(annotation);
@@ -144,14 +197,44 @@
   const closeAnnotationPanel = () => {
     showAnnotationPanel = false;
     selectedText = null;
-    selectedCFI = null;
+    selectedPosition = null;
     annotationNote = "";
     annotationColor = "yellow";
   };
 
   const handleGoToAnnotation = (cfi) => {
-    view?.goTo(cfi);
+    if (bookMetadata?.fileType === "pdf") {
+      goToPDFAnnotation(cfi, renderPDFPage);
+    } else {
+      view?.goTo(cfi);
+    }
     showAnnotationsList = false;
+  };
+
+  const handlePDFSelectionChange = () => {
+    if (bookMetadata?.fileType !== "pdf") return;
+    if (!pdfState.textLayer) return;
+    if (pdfSelectionTimeout) clearTimeout(pdfSelectionTimeout);
+    pdfSelectionTimeout = setTimeout(() => {
+      const captured = capturePDFSelection(pdfState, currentPage);
+      if (!captured) return;
+      selectedText = captured.text;
+      selectedPosition = captured.position;
+      showAnnotationPanel = true;
+    }, 200);
+  };
+
+  const bookmarkCurrentPage = () => {
+    if (!foliateState.cfi) return;
+    if (foliateState.sectionIndex !== null) {
+      selectedText = foliateState.sectionTotal
+        ? `Page ${foliateState.sectionIndex + 1} of ${foliateState.sectionTotal}`
+        : `Page ${foliateState.sectionIndex + 1}`;
+    } else {
+      selectedText = "Bookmark";
+    }
+    selectedPosition = foliateState.cfi;
+    showAnnotationPanel = true;
   };
 
   const goNext = () => {
@@ -280,6 +363,8 @@
     currentPage = pageNum;
     currentLocation = pageNum;
 
+    pdfState.textLayer = null;
+
     const page = await pdfDoc.getPage(pageNum);
     const containerHeight = window.innerHeight;
     const containerWidth = Math.min(window.innerWidth, 900);
@@ -326,6 +411,15 @@
       viewport,
     });
     await textLayer.render();
+
+    pdfState.textLayer = textLayerDiv;
+    pdfState.scale = viewport.scale;
+    drawPDFHighlightsForPage(
+      textLayerDiv,
+      pageNum,
+      annotations,
+      pdfState.scale,
+    );
 
     saveProgress(JSON.stringify({ type: "pdf", page: pageNum, totalPages }));
   };
@@ -390,8 +484,13 @@
           currentLocation = Math.round(fraction * 100);
           totalLocations = 100;
         }
+        if (e.detail.section?.current !== undefined) {
+          foliateState.sectionIndex = e.detail.section.current;
+          foliateState.sectionTotal = e.detail.section.total ?? null;
+        }
         const cfi = e.detail.cfi;
         if (cfi) {
+          foliateState.cfi = cfi;
           saveProgress(
             JSON.stringify({ type: bookMetadata.fileType, cfi, fraction }),
           );
@@ -405,26 +504,19 @@
           if (doc && doc.documentElement && doc.head) {
             epubContentDoc = doc;
 
-            const isDark = document.documentElement.classList.contains("dark");
             const style = doc.createElement("style");
-            style.id = "quiret-font-style";
-            style.textContent = `
-              p, div, span, li, td, th {
-                font-size: ${fontSize}px !important;
-              }
-              ${
-                isDark
-                  ? `
-              * { color: #E8EDF5 !important; }
-              a { color: #8FB0D8 !important; }
-              `
-                  : ""
-              }
-            `;
+            style.id = IFRAME_STYLE_ID;
+            style.textContent = buildIframeStyle({
+              fontSize,
+              isDark: document.documentElement.classList.contains("dark"),
+            });
             doc.head.appendChild(style);
+
+            doc.addEventListener("keydown", handleKeyPress);
 
             let selectionTimeout = null;
             doc.addEventListener("selectionchange", () => {
+              if (!TEXT_FORMATS.includes(bookMetadata?.fileType)) return;
               if (selectionTimeout) clearTimeout(selectionTimeout);
               selectionTimeout = setTimeout(() => {
                 const selection = doc.getSelection();
@@ -439,9 +531,9 @@
                     selectedText = text;
                     try {
                       const cfi = view.getCFI(e.detail.index, range);
-                      selectedCFI = cfi || `section-${e.detail.index}`;
+                      selectedPosition = cfi || `section-${e.detail.index}`;
                     } catch {
-                      selectedCFI = `section-${e.detail.index}`;
+                      selectedPosition = `section-${e.detail.index}`;
                     }
                     showAnnotationPanel = true;
                   }
@@ -492,7 +584,6 @@
     }
   });
 
-  // PDF effect
   $effect(() => {
     if (
       readerContainer &&
@@ -508,7 +599,7 @@
   $effect(() => {
     const currentSize = fontSize;
     if (epubContentDoc && TEXT_FORMATS.includes(bookMetadata?.fileType)) {
-      const style = epubContentDoc.getElementById("quiret-font-style");
+      const style = epubContentDoc.getElementById(IFRAME_STYLE_ID);
       if (style) {
         style.textContent = style.textContent.replace(
           /font-size:\s*\d+px/g,
@@ -544,6 +635,7 @@
       {isTouchDevice}
       {onClose}
       onToggleAnnotations={() => (showAnnotationsList = !showAnnotationsList)}
+      onBookmarkPage={bookmarkCurrentPage}
       onIncreaseFontSize={increaseFontSize}
       onDecreaseFontSize={decreaseFontSize}
       onToggleFullscreen={toggleFullscreen}

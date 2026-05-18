@@ -22,6 +22,81 @@ import (
 	"golang.org/x/image/draw"
 )
 
+const (
+	coverMaxWidth     = 320
+	coverMaxDecodeDim = 8000
+	pdfHeaderBytes    = 50000
+	pdfFieldMaxLen    = 200
+)
+
+type epubContainer struct {
+	Rootfiles struct {
+		Rootfile []struct {
+			FullPath string `xml:"full-path,attr"`
+		} `xml:"rootfile"`
+	} `xml:"rootfiles"`
+}
+
+type epubItem struct {
+	ID         string `xml:"id,attr"`
+	Href       string `xml:"href,attr"`
+	MediaType  string `xml:"media-type,attr"`
+	Properties string `xml:"properties,attr"`
+}
+
+type epubMeta struct {
+	Name    string `xml:"name,attr"`
+	Content string `xml:"content,attr"`
+}
+
+type epubPackage struct {
+	Metadata struct {
+		Title   []string   `xml:"title"`
+		Creator []string   `xml:"creator"`
+		Meta    []epubMeta `xml:"meta"`
+	} `xml:"metadata"`
+	Manifest struct {
+		Items []epubItem `xml:"item"`
+	} `xml:"manifest"`
+}
+
+type fb2Image struct {
+	Href string `xml:"href,attr"`
+}
+
+type fb2Author struct {
+	FirstName  string `xml:"first-name"`
+	MiddleName string `xml:"middle-name"`
+	LastName   string `xml:"last-name"`
+	Nickname   string `xml:"nickname"`
+}
+
+type fb2Coverpage struct {
+	Images []fb2Image `xml:"image"`
+}
+
+type fb2TitleInfo struct {
+	BookTitle string       `xml:"book-title"`
+	Authors   []fb2Author  `xml:"author"`
+	Coverpage fb2Coverpage `xml:"coverpage"`
+}
+
+type fb2Description struct {
+	TitleInfo fb2TitleInfo `xml:"title-info"`
+}
+
+type fb2Binary struct {
+	ID          string `xml:"id,attr"`
+	ContentType string `xml:"content-type,attr"`
+	Data        string `xml:",chardata"`
+}
+
+type fb2Book struct {
+	XMLName     xml.Name       `xml:"FictionBook"`
+	Description fb2Description `xml:"description"`
+	Binaries    []fb2Binary    `xml:"binary"`
+}
+
 func ExtractEPUBMetadata(epubPath, coverDir, fallbackTitle string) (title, author, coverPath string) {
 	title = fallbackTitle
 
@@ -31,13 +106,7 @@ func ExtractEPUBMetadata(epubPath, coverDir, fallbackTitle string) (title, autho
 	}
 	defer reader.Close()
 
-	var container struct {
-		Rootfiles struct {
-			Rootfile []struct {
-				FullPath string `xml:"full-path,attr"`
-			} `xml:"rootfile"`
-		} `xml:"rootfiles"`
-	}
+	var container epubContainer
 	containerData, err := readZipFile(reader, "META-INF/container.xml")
 	if err != nil {
 		return
@@ -53,26 +122,7 @@ func ExtractEPUBMetadata(epubPath, coverDir, fallbackTitle string) (title, autho
 		return
 	}
 
-	type epubItem struct {
-		ID         string `xml:"id,attr"`
-		Href       string `xml:"href,attr"`
-		MediaType  string `xml:"media-type,attr"`
-		Properties string `xml:"properties,attr"`
-	}
-	type epubMeta struct {
-		Name    string `xml:"name,attr"`
-		Content string `xml:"content,attr"`
-	}
-	var pkg struct {
-		Metadata struct {
-			Title   []string   `xml:"title"`
-			Creator []string   `xml:"creator"`
-			Meta    []epubMeta `xml:"meta"`
-		} `xml:"metadata"`
-		Manifest struct {
-			Items []epubItem `xml:"item"`
-		} `xml:"manifest"`
-	}
+	var pkg epubPackage
 	opfData, err := readZipFile(reader, opfPath)
 	if err != nil {
 		return
@@ -198,7 +248,7 @@ func ExtractPDFMetadata(pdfPath, originalName string) (title, author string) {
 	}
 	defer file.Close()
 
-	buffer := make([]byte, 50000)
+	buffer := make([]byte, pdfHeaderBytes)
 	n, err := file.Read(buffer)
 	if err != nil && err != io.EOF {
 		return
@@ -264,37 +314,6 @@ func ExtractFB2Metadata(fb2Path, coverDir, fallbackTitle string) (title, author,
 	data, err := os.ReadFile(fb2Path)
 	if err != nil {
 		return
-	}
-
-	type fb2Image struct {
-		Href string `xml:"href,attr"`
-	}
-	type fb2Author struct {
-		FirstName  string `xml:"first-name"`
-		MiddleName string `xml:"middle-name"`
-		LastName   string `xml:"last-name"`
-		Nickname   string `xml:"nickname"`
-	}
-	type fb2Coverpage struct {
-		Images []fb2Image `xml:"image"`
-	}
-	type fb2TitleInfo struct {
-		BookTitle string       `xml:"book-title"`
-		Authors   []fb2Author  `xml:"author"`
-		Coverpage fb2Coverpage `xml:"coverpage"`
-	}
-	type fb2Description struct {
-		TitleInfo fb2TitleInfo `xml:"title-info"`
-	}
-	type fb2Binary struct {
-		ID          string `xml:"id,attr"`
-		ContentType string `xml:"content-type,attr"`
-		Data        string `xml:",chardata"`
-	}
-	type fb2Book struct {
-		XMLName     xml.Name       `xml:"FictionBook"`
-		Description fb2Description `xml:"description"`
-		Binaries    []fb2Binary    `xml:"binary"`
 	}
 
 	var book fb2Book
@@ -392,8 +411,6 @@ func copyFile(src, dst string) error {
 	return os.WriteFile(dst, data, 0644)
 }
 
-const coverMaxWidth = 320
-
 func writeCoverImage(coverDir string, data []byte) string {
 	if !IsImageFile(data) {
 		return ""
@@ -402,8 +419,7 @@ func writeCoverImage(coverDir string, data []byte) string {
 		return ""
 	}
 
-	img, _, err := image.Decode(bytes.NewReader(data))
-	if err != nil {
+	saveOriginal := func() string {
 		ext := ".jpg"
 		if isPNG(data) {
 			ext = ".png"
@@ -413,6 +429,21 @@ func writeCoverImage(coverDir string, data []byte) string {
 			return ""
 		}
 		return coverPath
+	}
+
+	const maxCoverDim = 8000
+	cfg, _, cfgErr := image.DecodeConfig(bytes.NewReader(data))
+	if cfgErr != nil || cfg.Width > maxCoverDim || cfg.Height > maxCoverDim {
+		if cfgErr == nil {
+			log.Printf("Cover too large to thumbnail (%dx%d), storing original",
+				cfg.Width, cfg.Height)
+		}
+		return saveOriginal()
+	}
+
+	img, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return saveOriginal()
 	}
 
 	bounds := img.Bounds()
@@ -454,7 +485,7 @@ func extractPDFField(content, key string) string {
 	}
 	start += idx + 1
 	end := strings.Index(content[start:], ")")
-	if end == -1 || end >= 200 {
+	if end == -1 || end >= pdfFieldMaxLen {
 		return ""
 	}
 	val := strings.TrimSpace(content[start : start+end])

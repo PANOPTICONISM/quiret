@@ -1,5 +1,6 @@
 <script>
   import SidePanel from "./SidePanel.svelte";
+  import { HIGHLIGHT_COLOR_NAMES } from "../lib/constants.js";
 
   let {
     selectedText,
@@ -8,8 +9,6 @@
     onSave,
     onClose,
   } = $props();
-
-  const highlightColors = ["yellow", "green", "blue", "pink", "orange"];
 </script>
 
 <SidePanel title="Add highlight" labelId="annotation-panel-title" {onClose}>
@@ -17,7 +16,7 @@
     "{selectedText?.slice(0, 100)}{selectedText?.length > 100 ? '...' : ''}"
   </div>
   <div class="color-picker">
-    {#each highlightColors as color}
+    {#each HIGHLIGHT_COLOR_NAMES as color}
       <button
         class="color-btn"
         class:selected={annotationColor === color}
