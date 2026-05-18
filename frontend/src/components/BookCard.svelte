@@ -134,13 +134,14 @@
     bottom: 0;
     left: 0;
     right: 0;
-    height: 4px;
+    height: 5px;
     background: var(--progress-track);
+    box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.3);
   }
 
   .progress-fill {
     height: 100%;
-    background: var(--accent);
+    background: var(--progress-fill);
     transition: width 0.3s ease;
   }
 

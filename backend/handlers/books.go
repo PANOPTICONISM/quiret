@@ -274,6 +274,8 @@ func ServeCover(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+
 	// Set appropriate content type based on file extension
 	ext := strings.ToLower(filepath.Ext(coverPath))
 	switch ext {

@@ -148,7 +148,7 @@
     }
   };
 
-  const getReadingProgress = (book) => {
+  const computeProgress = (book) => {
     if (!book.readingProgress) return 0;
     try {
       const progress = JSON.parse(book.readingProgress);
@@ -165,6 +165,14 @@
     }
     return 0;
   };
+
+  const progressByBookId = $derived.by(() => {
+    const map = new Map();
+    for (const book of books) {
+      map.set(book.id, computeProgress(book));
+    }
+    return map;
+  });
 
   const deleteBook = async (bookId, bookTitle) => {
     if (!confirm(`Delete "${bookTitle}"?`)) return;
@@ -279,7 +287,7 @@
       {#each filteredBooks as book (book.id)}
         <BookCard
           {book}
-          progress={getReadingProgress(book)}
+          progress={progressByBookId.get(book.id) ?? 0}
           onOpen={onOpenBook}
           onDelete={deleteBook}
         />

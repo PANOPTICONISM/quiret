@@ -2,10 +2,14 @@ package handlers
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/xml"
 	"fmt"
+	"image"
+	"image/jpeg"
+	_ "image/png"
 	"io"
 	"log"
 	"os"
@@ -14,6 +18,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"golang.org/x/image/draw"
 )
 
 func ExtractEPUBMetadata(epubPath, coverDir, fallbackTitle string) (title, author, coverPath string) {
@@ -386,19 +392,48 @@ func copyFile(src, dst string) error {
 	return os.WriteFile(dst, data, 0644)
 }
 
+const coverMaxWidth = 320
+
 func writeCoverImage(coverDir string, data []byte) string {
 	if !IsImageFile(data) {
 		return ""
 	}
-	ext := ".jpg"
-	if isPNG(data) {
-		ext = ".png"
-	}
 	if err := os.MkdirAll(coverDir, 0755); err != nil {
 		return ""
 	}
-	coverPath := filepath.Join(coverDir, "cover"+ext)
-	if err := os.WriteFile(coverPath, data, 0644); err != nil {
+
+	img, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		ext := ".jpg"
+		if isPNG(data) {
+			ext = ".png"
+		}
+		coverPath := filepath.Join(coverDir, "cover"+ext)
+		if writeErr := os.WriteFile(coverPath, data, 0644); writeErr != nil {
+			return ""
+		}
+		return coverPath
+	}
+
+	bounds := img.Bounds()
+	srcW := bounds.Dx()
+	srcH := bounds.Dy()
+	dstW, dstH := srcW, srcH
+	if srcW > coverMaxWidth {
+		dstW = coverMaxWidth
+		dstH = srcH * coverMaxWidth / srcW
+	}
+
+	dst := image.NewRGBA(image.Rect(0, 0, dstW, dstH))
+	draw.ApproxBiLinear.Scale(dst, dst.Bounds(), img, bounds, draw.Over, nil)
+
+	coverPath := filepath.Join(coverDir, "cover.jpg")
+	out, err := os.Create(coverPath)
+	if err != nil {
+		return ""
+	}
+	defer out.Close()
+	if err := jpeg.Encode(out, dst, &jpeg.Options{Quality: 85}); err != nil {
 		return ""
 	}
 	return coverPath
