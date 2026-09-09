@@ -118,7 +118,7 @@
       filename.endsWith(ext),
     );
     if (!isSupported) {
-      alert("Supported formats: EPUB, PDF, FB2, CBZ");
+      alert("Supported formats: EPUB, PDF, FB2, CBZ, and audiobooks (MP3, M4B, M4A)");
       return;
     }
     await uploadBook(file);
@@ -159,6 +159,8 @@
         return Math.round(progress.fraction * 100);
       } else if (progress.type === "pdf" && progress.page && progress.totalPages) {
         return Math.round((progress.page / progress.totalPages) * 100);
+      } else if (progress.type === "audio" && progress.position && progress.duration) {
+        return Math.round((progress.position / progress.duration) * 100);
       }
     } catch (e) {
       return 0;
@@ -300,7 +302,7 @@
   {:else}
     <div class="empty-state empty-state-onboard">
       <h2>Your library is empty</h2>
-      <p>Drop an EPUB, PDF, FB2, or CBZ anywhere on this page — or pick one to upload.</p>
+      <p>Drop an EPUB, PDF, FB2, CBZ, or audiobook anywhere on this page — or pick one to upload.</p>
       <button class="upload-btn primary" onclick={triggerUpload}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />

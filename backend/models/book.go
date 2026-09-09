@@ -14,6 +14,11 @@ type Book struct {
 	ReadingProgress string    `json:"readingProgress,omitempty"`
 }
 
+type Chapter struct {
+	Title string  `json:"title"`
+	Start float64 `json:"start"` // start offset in seconds
+}
+
 type Annotation struct {
 	ID        string    `json:"id"`
 	BookID    string    `json:"bookId"`

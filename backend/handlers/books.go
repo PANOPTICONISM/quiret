@@ -68,6 +68,12 @@ func UploadBook(w http.ResponseWriter, r *http.Request) {
 		".pdf":  "pdf",
 		".fb2":  "fb2",
 		".cbz":  "cbz",
+		".mp3":  "mp3",
+		".m4b":  "m4b",
+		".m4a":  "m4a",
+		".aac":  "aac",
+		".ogg":  "ogg",
+		".opus": "opus",
 	}
 	fileType, ok := supportedTypes[fileExt]
 	if !ok {
@@ -114,6 +120,8 @@ func UploadBook(w http.ResponseWriter, r *http.Request) {
 		coverPath = ExtractCBZCover(filePath, storageDir)
 	case "fb2":
 		title, author, coverPath = ExtractFB2Metadata(filePath, storageDir, originalName)
+	case "mp3", "m4b", "m4a", "aac", "ogg", "opus":
+		title, author, coverPath = ExtractAudioMetadata(filePath, storageDir, originalName)
 	default:
 		title = originalName
 		author = ""
@@ -247,6 +255,12 @@ func ServeBookFile(w http.ResponseWriter, r *http.Request) {
 		"pdf":  "application/pdf",
 		"fb2":  "application/x-fictionbook+xml",
 		"cbz":  "application/vnd.comicbook+zip",
+		"mp3":  "audio/mpeg",
+		"m4b":  "audio/mp4",
+		"m4a":  "audio/mp4",
+		"aac":  "audio/aac",
+		"ogg":  "audio/ogg",
+		"opus": "audio/ogg",
 	}
 	if ct, ok := contentTypes[fileType]; ok {
 		w.Header().Set("Content-Type", ct)
@@ -255,6 +269,31 @@ func ServeBookFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.ServeFile(w, r, filePath)
+}
+
+func GetChapters(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	bookID := vars["id"]
+
+	var filePath string
+	err := db.DB.QueryRow("SELECT file_path FROM books WHERE id = ?", bookID).Scan(&filePath)
+	if err != nil {
+		http.Error(w, "Book not found", http.StatusNotFound)
+		return
+	}
+
+	if !isPathAllowed(filePath) {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+
+	chapters := ExtractAudioChapters(filePath)
+	if chapters == nil {
+		chapters = []models.Chapter{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(chapters)
 }
 
 func ServeCover(w http.ResponseWriter, r *http.Request) {

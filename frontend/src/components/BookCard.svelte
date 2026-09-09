@@ -1,5 +1,9 @@
 <script>
+  import { AUDIO_FORMATS } from "../lib/constants.js";
+
   let { book, progress = 0, onOpen, onDelete } = $props();
+
+  const isAudio = $derived(AUDIO_FORMATS.includes(book.fileType));
 </script>
 
 <article class="book-card">
@@ -23,6 +27,14 @@
       <span class="file-type-tag">
         {book.fileType?.toUpperCase() || "EPUB"}
       </span>
+      {#if isAudio}
+        <span class="audio-badge" aria-label="Audiobook">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
+            <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
+          </svg>
+        </span>
+      {/if}
       {#if progress > 0}
         <div class="progress-indicator" aria-label="Reading progress">
           <div class="progress-fill" style="width: {progress}%"></div>
@@ -127,6 +139,20 @@
     border-radius: 3px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+  }
+
+  .audio-badge {
+    position: absolute;
+    top: 0.5rem;
+    left: 0.5rem;
+    background: var(--overlay-button-bg);
+    color: white;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .progress-indicator {

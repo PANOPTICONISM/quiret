@@ -6,7 +6,8 @@
   import ReaderHeader from "./ReaderHeader.svelte";
   import AnnotationPanel from "./AnnotationPanel.svelte";
   import AnnotationsList from "./AnnotationsList.svelte";
-  import { FOLIATE_FORMATS, TEXT_FORMATS } from "../lib/constants.js";
+  import AudioPlayer from "./AudioPlayer.svelte";
+  import { FOLIATE_FORMATS, TEXT_FORMATS, AUDIO_FORMATS } from "../lib/constants.js";
   import {
     drawPDFHighlightsForPage,
     applyPDFHighlight,
@@ -26,6 +27,7 @@
 
   let bookBlob = $state(null);
   let bookMetadata = $state(null);
+  let isAudio = $state(false);
   let pdfDoc = $state(null);
   let currentPage = $state(1);
   let totalPages = $state(0);
@@ -324,6 +326,7 @@
   };
 
   const handleKeyPress = (event) => {
+    if (isAudio) return; // AudioPlayer handles its own keyboard shortcuts
     if (event.key === "Escape") {
       if (showAnnotationPanel) closeAnnotationPanel();
       else if (showAnnotationsList) showAnnotationsList = false;
@@ -434,6 +437,14 @@
       const metadataResponse = await fetch(`/api/books/${bookId}`);
       if (!metadataResponse.ok) throw new Error("Failed to load book metadata");
       bookMetadata = await metadataResponse.json();
+
+      // Audiobooks stream directly via the <audio> element (range requests),
+      // so skip the blob download and text/PDF rendering machinery entirely.
+      if (AUDIO_FORMATS.includes(bookMetadata.fileType)) {
+        isAudio = true;
+        loading = false;
+        return;
+      }
 
       await fetchAnnotations();
 
@@ -615,6 +626,9 @@
   onfullscreenchange={handleFullscreenChange}
 />
 
+{#if isAudio}
+  <AudioPlayer {bookId} metadata={bookMetadata} {onClose} />
+{:else}
 <div class="reader-wrapper">
   <div
     class="reader-content"
@@ -685,6 +699,7 @@
     />
   {/if}
 </div>
+{/if}
 
 <style>
   .reader-wrapper {

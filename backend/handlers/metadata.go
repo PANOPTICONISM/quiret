@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/xml"
 	"fmt"
 	"image"
@@ -15,10 +16,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"quiret/models"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/dhowden/tag"
 	"golang.org/x/image/draw"
 )
 
@@ -401,6 +404,182 @@ func ExtractCBZCover(cbzPath, coverDir string) string {
 	}
 
 	return writeCoverImage(coverDir, data)
+}
+
+// ExtractAudioMetadata reads title, author and embedded cover art from an audio
+// file (MP3, M4B, M4A, AAC, OGG, ...) using the file's tags. Falls back to the
+// provided title when tags are missing.
+func ExtractAudioMetadata(audioPath, coverDir, fallbackTitle string) (title, author, coverPath string) {
+	title = fallbackTitle
+
+	file, err := os.Open(audioPath)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+
+	m, err := tag.ReadFrom(file)
+	if err != nil {
+		// Not fatal: many valid audio files carry no readable tags.
+		return
+	}
+
+	if t := strings.TrimSpace(m.Title()); t != "" {
+		title = t
+	} else if al := strings.TrimSpace(m.Album()); al != "" {
+		title = al
+	}
+
+	author = strings.TrimSpace(m.Artist())
+	if author == "" {
+		author = strings.TrimSpace(m.AlbumArtist())
+	}
+
+	if pic := m.Picture(); pic != nil && len(pic.Data) > 0 {
+		coverPath = writeCoverImage(coverDir, pic.Data)
+	}
+
+	return
+}
+
+// ExtractAudioChapters returns embedded chapter markers for MP4-based audiobooks
+// (.m4b/.m4a) by parsing the Nero-style "chpl" atom (moov > udta > chpl). Returns
+// nil for formats without embedded chapters or when none are found.
+func ExtractAudioChapters(audioPath string) []models.Chapter {
+	ext := strings.ToLower(filepath.Ext(audioPath))
+	if ext != ".m4b" && ext != ".m4a" && ext != ".mp4" {
+		return nil
+	}
+
+	file, err := os.Open(audioPath)
+	if err != nil {
+		return nil
+	}
+	defer file.Close()
+
+	info, err := file.Stat()
+	if err != nil {
+		return nil
+	}
+	size := info.Size()
+
+	moovStart, moovEnd, ok := findMP4Atom(file, 0, size, "moov")
+	if !ok {
+		return nil
+	}
+	udtaStart, udtaEnd, ok := findMP4Atom(file, moovStart, moovEnd, "udta")
+	if !ok {
+		return nil
+	}
+	chplStart, chplEnd, ok := findMP4Atom(file, udtaStart, udtaEnd, "chpl")
+	if !ok {
+		return nil
+	}
+
+	n := chplEnd - chplStart
+	if n <= 0 || n > 1<<20 { // chapter lists are small; guard against bad sizes
+		return nil
+	}
+	buf := make([]byte, n)
+	if _, err := file.ReadAt(buf, chplStart); err != nil {
+		return nil
+	}
+
+	return parseChplAtom(buf)
+}
+
+// findMP4Atom iterates the MP4 boxes within [start, end) and returns the payload
+// range (start, end) of the first box matching want, along with whether it was found.
+func findMP4Atom(r io.ReaderAt, start, end int64, want string) (int64, int64, bool) {
+	pos := start
+	header := make([]byte, 8)
+	for pos+8 <= end {
+		if _, err := r.ReadAt(header, pos); err != nil {
+			return 0, 0, false
+		}
+		boxSize := int64(binary.BigEndian.Uint32(header[0:4]))
+		boxType := string(header[4:8])
+
+		var payloadStart, payloadEnd int64
+		switch boxSize {
+		case 1: // 64-bit extended size follows the header
+			ext := make([]byte, 8)
+			if _, err := r.ReadAt(ext, pos+8); err != nil {
+				return 0, 0, false
+			}
+			boxSize = int64(binary.BigEndian.Uint64(ext))
+			payloadStart = pos + 16
+			payloadEnd = pos + boxSize
+		case 0: // box extends to the end of the container
+			payloadStart = pos + 8
+			payloadEnd = end
+		default:
+			payloadStart = pos + 8
+			payloadEnd = pos + boxSize
+		}
+
+		if boxSize != 0 && boxSize < 8 {
+			return 0, 0, false // malformed box; bail out
+		}
+		if payloadEnd <= pos || payloadEnd > end {
+			return 0, 0, false
+		}
+		if boxType == want {
+			return payloadStart, payloadEnd, true
+		}
+		pos = payloadEnd
+	}
+	return 0, 0, false
+}
+
+// parseChplAtom decodes a Nero "chpl" chapter-list box payload. The layout follows
+// the widely-used convention (see FFmpeg's mov_read_chpl): a full-box header, an
+// optional 32-bit field for version != 0, a one-byte chapter count, then for each
+// chapter an 8-byte start time (in 100-nanosecond units) and a length-prefixed title.
+func parseChplAtom(b []byte) []models.Chapter {
+	if len(b) < 5 {
+		return nil
+	}
+	version := b[0]
+	p := 4 // skip version (1) + flags (3)
+	if version != 0 {
+		if len(b) < p+4 {
+			return nil
+		}
+		p += 4
+	}
+	if p >= len(b) {
+		return nil
+	}
+	count := int(b[p])
+	p++
+	if count <= 0 || count > 5000 {
+		return nil
+	}
+
+	chapters := make([]models.Chapter, 0, count)
+	for i := 0; i < count; i++ {
+		if p+9 > len(b) {
+			break
+		}
+		start := binary.BigEndian.Uint64(b[p : p+8])
+		p += 8
+		titleLen := int(b[p])
+		p++
+		if p+titleLen > len(b) {
+			break
+		}
+		title := strings.TrimSpace(string(b[p : p+titleLen]))
+		p += titleLen
+		chapters = append(chapters, models.Chapter{
+			Title: title,
+			Start: float64(start) / 1e7, // 100ns units -> seconds
+		})
+	}
+	if len(chapters) == 0 {
+		return nil
+	}
+	return chapters
 }
 
 func copyFile(src, dst string) error {

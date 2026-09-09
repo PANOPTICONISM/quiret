@@ -9,8 +9,8 @@ A minimal, low-footprint ebook library for your home server.
 - **~30MB Docker image**, low idle RAM — designed for a Pi, NAS, or any low-power box
 - **One static Go binary, one SQLite file** — no external services, no background workers
 - **No Calibre, no JVM, no Node at runtime** — `poppler-utils` is the only system dependency
-- **Works for EPUB, FB2, CBZ, and PDF** — using Foliate-js for ebooks and comics, PDF.js for PDFs
-- **Auto-extracted covers and metadata** for EPUB, PDF, FB2, and CBZ
+- **Works for EPUB, FB2, CBZ, PDF, and audiobooks** — Foliate-js for ebooks and comics, PDF.js for PDFs, and a built-in player for MP3/M4B/M4A audiobooks
+- **Auto-extracted covers and metadata** for EPUB, PDF, FB2, CBZ, and audiobooks (with chapter markers for M4B)
 - **Annotations, reading progress, drag-and-drop upload, folder auto-scan**
 
 ## Tech Stack

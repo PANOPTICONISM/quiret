@@ -36,6 +36,12 @@ func ScanDirectory(booksDir string) ([]models.Book, error) {
 			".pdf":  "pdf",
 			".fb2":  "fb2",
 			".cbz":  "cbz",
+			".mp3":  "mp3",
+			".m4b":  "m4b",
+			".m4a":  "m4a",
+			".aac":  "aac",
+			".ogg":  "ogg",
+			".opus": "opus",
 		}
 		ext := strings.ToLower(filepath.Ext(filename))
 		fileType, ok := supportedTypes[ext]
@@ -84,6 +90,8 @@ func ScanDirectory(booksDir string) ([]models.Book, error) {
 			coverPath = ExtractCBZCover(filePath, storageDir)
 		case "fb2":
 			title, author, coverPath = ExtractFB2Metadata(filePath, storageDir, originalName)
+		case "mp3", "m4b", "m4a", "aac", "ogg", "opus":
+			title, author, coverPath = ExtractAudioMetadata(filePath, storageDir, originalName)
 		default:
 			title = originalName
 			author = ""
