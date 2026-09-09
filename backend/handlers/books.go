@@ -19,7 +19,7 @@ import (
 
 var (
 	DataPath  string
-	BooksPath string
+	BookPaths []string
 )
 
 func isPathAllowed(filePath string) bool {
@@ -27,7 +27,8 @@ func isPathAllowed(filePath string) bool {
 	if err != nil {
 		return false
 	}
-	for _, root := range []string{DataPath, BooksPath} {
+	roots := append([]string{DataPath}, BookPaths...)
+	for _, root := range roots {
 		if root == "" {
 			continue
 		}

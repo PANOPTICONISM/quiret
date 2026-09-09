@@ -25,9 +25,9 @@ func main() {
 		dataPath = "./data"
 	}
 
-	booksPath := os.Getenv("BOOKS_PATH")
-	if booksPath == "" {
-		booksPath = filepath.Join(dataPath, "books")
+	booksPathEnv := os.Getenv("BOOKS_PATH")
+	if booksPathEnv == "" {
+		booksPathEnv = filepath.Join(dataPath, "books")
 	}
 
 	// Convert to absolute paths
@@ -37,14 +37,33 @@ func main() {
 	}
 	dataPath = absDataPath
 
-	absBooksPath, err := filepath.Abs(booksPath)
-	if err != nil {
-		log.Fatal("Failed to get absolute books path:", err)
+	// Scan roots come from BOOKS_PATH plus the optional AUDIOBOOKS_PATH. Each may
+	// itself list several folders separated by the OS path-list separator (":").
+	var bookPaths []string
+	seen := make(map[string]bool)
+	addPaths := func(env string) {
+		for _, p := range filepath.SplitList(env) {
+			p = strings.TrimSpace(p)
+			if p == "" {
+				continue
+			}
+			abs, err := filepath.Abs(p)
+			if err != nil {
+				log.Printf("Skipping invalid books path %q: %v", p, err)
+				continue
+			}
+			if seen[abs] {
+				continue
+			}
+			seen[abs] = true
+			bookPaths = append(bookPaths, abs)
+		}
 	}
-	booksPath = absBooksPath
+	addPaths(booksPathEnv)
+	addPaths(os.Getenv("AUDIOBOOKS_PATH"))
 
 	handlers.DataPath = dataPath
-	handlers.BooksPath = booksPath
+	handlers.BookPaths = bookPaths
 
 	if err := os.MkdirAll(dataPath, 0755); err != nil {
 		log.Fatal("Failed to create data directory:", err)
@@ -55,9 +74,8 @@ func main() {
 		log.Fatal("Failed to initialize database:", err)
 	}
 
-	// Scan books directory on startup
-	log.Printf("Scanning books directory: %s", booksPath)
-	scanBooksOnStartup(booksPath)
+	// Scan books directories on startup
+	scanBooksOnStartup(bookPaths)
 
 	r := mux.NewRouter()
 	r.Use(securityMiddleware)
@@ -205,15 +223,20 @@ func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	http.FileServer(http.Dir(h.staticPath)).ServeHTTP(w, r)
 }
 
-func scanBooksOnStartup(booksPath string) {
-	addedBooks, err := handlers.ScanDirectory(booksPath)
-	if err != nil {
-		log.Printf("Warning: Failed to scan books directory: %v", err)
-		return
+func scanBooksOnStartup(bookPaths []string) {
+	total := 0
+	for _, booksPath := range bookPaths {
+		log.Printf("Scanning books directory: %s", booksPath)
+		addedBooks, err := handlers.ScanDirectory(booksPath)
+		if err != nil {
+			log.Printf("Warning: Failed to scan books directory %s: %v", booksPath, err)
+			continue
+		}
+		total += len(addedBooks)
 	}
 
-	if len(addedBooks) > 0 {
-		log.Printf("Scan complete: Added %d books from directory", len(addedBooks))
+	if total > 0 {
+		log.Printf("Scan complete: Added %d books", total)
 	} else {
 		log.Println("Scan complete: No new books found")
 	}

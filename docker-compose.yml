@@ -10,7 +10,11 @@ services:
     environment:
       - DATA_PATH=/data
       - BOOKS_PATH=/books
+      # To also scan a sibling audiobooks folder, set AUDIOBOOKS_PATH in .env and
+      # uncomment the line below plus its volume mount.
+      # - AUDIOBOOKS_PATH=/audiobooks
       - STATIC_PATH=/app/static
     volumes:
       - ./data:/data
       - ${BOOKS_PATH}:/books:ro
+      # - ${AUDIOBOOKS_PATH}:/audiobooks:ro
