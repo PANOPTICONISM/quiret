@@ -29,9 +29,10 @@
       </span>
       {#if isAudio}
         <span class="audio-badge" aria-label="Audiobook">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
-            <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 14v-2a7 7 0 0 1 14 0v2" />
+            <path d="M7 14v4a1 1 0 0 1-1 1 3 3 0 0 1-3-3 3 3 0 0 1 3-3 1 1 0 0 1 1 1z" fill="currentColor" stroke="none" />
+            <path d="M17 14v4a1 1 0 0 0 1 1 3 3 0 0 0 3-3 3 3 0 0 0-3-3 1 1 0 0 0-1 1z" fill="currentColor" stroke="none" />
           </svg>
         </span>
       {/if}
@@ -145,7 +146,7 @@
     position: absolute;
     top: 0.5rem;
     left: 0.5rem;
-    background: var(--overlay-button-bg);
+    background: var(--accent);
     color: white;
     width: 26px;
     height: 26px;
@@ -153,6 +154,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    box-shadow: var(--shadow-sm);
   }
 
   .progress-indicator {
