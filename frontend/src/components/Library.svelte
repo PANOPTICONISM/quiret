@@ -218,6 +218,7 @@
     </div>
     <div class="header-actions">
       {#if books.length > 0}
+        <div class="actions-primary">
         <div class="search">
           <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="11" cy="11" r="7" />
@@ -240,7 +241,9 @@
             <polyline points="6 9 12 15 18 9" />
           </svg>
         </div>
+        </div>
       {/if}
+      <div class="actions-secondary">
       <button
         class="upload-btn"
         onclick={triggerUpload}
@@ -248,14 +251,14 @@
       >
         {#if uploading}
           <span class="spinner-sm"></span>
-          Uploading
+          <span class="upload-label">Uploading</span>
         {:else}
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
             <polyline points="17 8 12 3 7 8" />
             <line x1="12" y1="3" x2="12" y2="15" />
           </svg>
-          Upload
+          <span class="upload-label">Upload</span>
         {/if}
       </button>
       <button
@@ -281,6 +284,7 @@
           </svg>
         {/if}
       </button>
+      </div>
     </div>
   </header>
 
@@ -370,6 +374,13 @@
     align-items: center;
     gap: 0.5rem;
     flex-wrap: wrap;
+  }
+
+  /* On desktop the groups are transparent: their children lay out directly in
+     .header-actions. On mobile they become two stacked rows (see media query). */
+  .actions-primary,
+  .actions-secondary {
+    display: contents;
   }
 
   .search {
@@ -576,7 +587,52 @@
     .library-header {
       margin-bottom: 1.75rem;
     }
-    .search-input { width: 130px; }
+    /* Title row holds the icon actions (upload + dark toggle); search + filter
+       drop to a full-width row beneath. */
+    .library-header {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      grid-template-areas:
+        "brand actions"
+        "search search";
+      align-items: center;
+      gap: 0.85rem 0.5rem;
+    }
+    .brand {
+      grid-area: brand;
+    }
+    .header-actions {
+      display: contents;
+    }
+    .actions-secondary {
+      grid-area: actions;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      justify-self: end;
+    }
+    .actions-primary {
+      grid-area: search;
+      display: flex;
+      gap: 0.5rem;
+      width: 100%;
+    }
+    .search {
+      flex: 1 1 auto;
+    }
+    .search-input {
+      width: 100%;
+    }
+    .select-wrapper {
+      flex: 0 0 auto;
+    }
+    /* Upload becomes an icon-only button on the title row. */
+    .upload-label {
+      display: none;
+    }
+    .upload-btn {
+      padding: 0.5rem;
+    }
     h1 { font-size: 1.85rem; }
     .books-grid {
       grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
