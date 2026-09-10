@@ -53,6 +53,12 @@ func InitDB(dataPath string) error {
 		log.Printf("Migration warning: %v", err)
 	}
 
+	// Migration: Add progress_updated_at column (used to order the "Continue" shelf)
+	_, err = DB.Exec(`ALTER TABLE books ADD COLUMN progress_updated_at DATETIME`)
+	if err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
+		log.Printf("Migration warning: %v", err)
+	}
+
 	_, err = DB.Exec(`
 		CREATE TABLE IF NOT EXISTS annotations (
 			id TEXT PRIMARY KEY,

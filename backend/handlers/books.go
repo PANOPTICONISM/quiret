@@ -159,7 +159,7 @@ func UploadBook(w http.ResponseWriter, r *http.Request) {
 }
 
 func GetBooks(w http.ResponseWriter, r *http.Request) {
-	rows, err := db.DB.Query("SELECT id, title, author, cover_path, file_path, file_size, file_type, added_at, reading_progress FROM books ORDER BY added_at DESC")
+	rows, err := db.DB.Query("SELECT id, title, author, cover_path, file_path, file_size, file_type, added_at, reading_progress, progress_updated_at FROM books ORDER BY added_at DESC")
 	if err != nil {
 		http.Error(w, "Failed to fetch books", http.StatusInternalServerError)
 		return
@@ -170,13 +170,17 @@ func GetBooks(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var book models.Book
 		var readingProgress sql.NullString
-		err := rows.Scan(&book.ID, &book.Title, &book.Author, &book.CoverPath, &book.FilePath, &book.FileSize, &book.FileType, &book.AddedAt, &readingProgress)
+		var progressUpdatedAt sql.NullTime
+		err := rows.Scan(&book.ID, &book.Title, &book.Author, &book.CoverPath, &book.FilePath, &book.FileSize, &book.FileType, &book.AddedAt, &readingProgress, &progressUpdatedAt)
 		if err != nil {
 			log.Println("Scan error:", err)
 			continue
 		}
 		if readingProgress.Valid {
 			book.ReadingProgress = readingProgress.String
+		}
+		if progressUpdatedAt.Valid {
+			book.ProgressUpdatedAt = &progressUpdatedAt.Time
 		}
 		books = append(books, book)
 	}
@@ -191,10 +195,11 @@ func GetBook(w http.ResponseWriter, r *http.Request) {
 
 	var book models.Book
 	var readingProgress sql.NullString
+	var progressUpdatedAt sql.NullTime
 	err := db.DB.QueryRow(
-		"SELECT id, title, author, cover_path, file_path, file_size, file_type, added_at, reading_progress FROM books WHERE id = ?",
+		"SELECT id, title, author, cover_path, file_path, file_size, file_type, added_at, reading_progress, progress_updated_at FROM books WHERE id = ?",
 		bookID,
-	).Scan(&book.ID, &book.Title, &book.Author, &book.CoverPath, &book.FilePath, &book.FileSize, &book.FileType, &book.AddedAt, &readingProgress)
+	).Scan(&book.ID, &book.Title, &book.Author, &book.CoverPath, &book.FilePath, &book.FileSize, &book.FileType, &book.AddedAt, &readingProgress, &progressUpdatedAt)
 
 	if err != nil {
 		http.Error(w, "Book not found", http.StatusNotFound)
@@ -203,6 +208,9 @@ func GetBook(w http.ResponseWriter, r *http.Request) {
 
 	if readingProgress.Valid {
 		book.ReadingProgress = readingProgress.String
+	}
+	if progressUpdatedAt.Valid {
+		book.ProgressUpdatedAt = &progressUpdatedAt.Time
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -222,7 +230,7 @@ func SaveProgress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err := db.DB.Exec("UPDATE books SET reading_progress = ? WHERE id = ?", payload.Progress, bookID)
+	_, err := db.DB.Exec("UPDATE books SET reading_progress = ?, progress_updated_at = ? WHERE id = ?", payload.Progress, time.Now(), bookID)
 	if err != nil {
 		log.Printf("SaveProgress DB error for book %s: %v", bookID, err)
 		http.Error(w, "Failed to save progress", http.StatusInternalServerError)

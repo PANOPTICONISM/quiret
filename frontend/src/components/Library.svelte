@@ -176,6 +176,19 @@
     return map;
   });
 
+  // In-progress books (started but not finished), most recently opened first.
+  const continueBooks = $derived.by(() => {
+    const items = books
+      .map((book) => ({ book, progress: progressByBookId.get(book.id) ?? 0 }))
+      .filter((x) => x.progress > 0 && x.progress < 100);
+    items.sort((a, b) => {
+      const ta = a.book.progressUpdatedAt ? Date.parse(a.book.progressUpdatedAt) : 0;
+      const tb = b.book.progressUpdatedAt ? Date.parse(b.book.progressUpdatedAt) : 0;
+      return tb - ta;
+    });
+    return items.slice(0, 12).map((x) => x.book);
+  });
+
   const deleteBook = async (bookId, bookTitle) => {
     if (!confirm(`Delete "${bookTitle}"?`)) return;
 
@@ -287,6 +300,24 @@
       </div>
     </div>
   </header>
+
+  {#if !searchQuery.trim() && continueBooks.length > 0}
+    <section class="continue">
+      <h2 class="section-title">Continue</h2>
+      <div class="continue-row">
+        {#each continueBooks as book (book.id)}
+          <div class="continue-item">
+            <BookCard
+              {book}
+              progress={progressByBookId.get(book.id) ?? 0}
+              onOpen={onOpenBook}
+              onDelete={deleteBook}
+            />
+          </div>
+        {/each}
+      </div>
+    </section>
+  {/if}
 
   {#if filteredBooks.length > 0}
     <div class="books-grid">
@@ -515,6 +546,33 @@
     to { transform: rotate(360deg); }
   }
 
+  .continue {
+    margin-bottom: 2.75rem;
+  }
+
+  .section-title {
+    font-family: var(--font-serif);
+    font-size: 1.15rem;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 1.1rem;
+  }
+
+  .continue-row {
+    display: flex;
+    gap: 1.25rem;
+    overflow-x: auto;
+    padding-bottom: 0.5rem;
+    scroll-snap-type: x proximity;
+    overscroll-behavior-x: contain;
+  }
+
+  .continue-item {
+    flex: 0 0 auto;
+    width: 150px;
+    scroll-snap-align: start;
+  }
+
   .books-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
@@ -634,6 +692,7 @@
       padding: 0.5rem;
     }
     h1 { font-size: 1.85rem; }
+    .continue-item { width: 120px; }
     .books-grid {
       grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
       gap: 1.75rem 1rem;
