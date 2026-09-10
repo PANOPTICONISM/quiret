@@ -124,11 +124,13 @@
 </script>
 
 <SidePanel title="Podcasts" labelId="podcast-title" {onClose}>
+  <div class="pm-root">
   {#if error}
     <p class="error">{error}</p>
   {/if}
 
   {#if show}
+    <div class="detail">
     <button class="back-btn" onclick={clearShow}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M15 18l-6-6 6-6" />
@@ -173,7 +175,9 @@
         </li>
       {/each}
     </ul>
+    </div>
   {:else}
+    <div class="list-view">
     <form
       class="feed-row"
       onsubmit={(e) => {
@@ -224,10 +228,37 @@
         {/if}
       </div>
     {/if}
+    </div>
   {/if}
+  </div>
 </SidePanel>
 
 <style>
+  .pm-root {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .detail,
+  .list-view {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  /* Fixed header rows; the list below them takes the remaining height. */
+  .error,
+  .back-btn,
+  .feed-row,
+  .saved-label,
+  .saved-filter,
+  .show-head {
+    flex-shrink: 0;
+  }
+
   .feed-row {
     display: flex;
     gap: 0.5rem;
@@ -326,7 +357,8 @@
   }
 
   .saved-list {
-    max-height: 46vh;
+    flex: 1;
+    min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
   }
@@ -443,6 +475,10 @@
     list-style: none;
     margin: 0;
     padding: 0;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
 
   .episodes li {
