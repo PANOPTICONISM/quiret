@@ -14,10 +14,22 @@
 
   let savedFeeds = $state([]);
   let savingFeed = $state(false);
+  let savedFilter = $state("");
 
   const currentSaved = $derived(
     !!loadedUrl && savedFeeds.some((f) => f.url === loadedUrl),
   );
+
+  const filteredSaved = $derived.by(() => {
+    const q = savedFilter.trim().toLowerCase();
+    if (!q) return savedFeeds;
+    return savedFeeds.filter((f) => (f.title || f.url).toLowerCase().includes(q));
+  });
+
+  const clearShow = () => {
+    show = null;
+    loadedUrl = null;
+  };
 
   const loadSavedFeeds = async () => {
     try {
@@ -112,51 +124,18 @@
 </script>
 
 <SidePanel title="Podcasts" labelId="podcast-title" {onClose}>
-  <form
-    class="feed-row"
-    onsubmit={(e) => {
-      e.preventDefault();
-      fetchFeed();
-    }}
-  >
-    <input
-      type="url"
-      bind:value={feedUrl}
-      placeholder="Paste an RSS feed URL"
-      aria-label="RSS feed URL"
-    />
-    <button type="submit" disabled={loading || !feedUrl.trim()}>
-      {loading ? "Loading..." : "Load"}
-    </button>
-  </form>
-
   {#if error}
     <p class="error">{error}</p>
   {/if}
 
-  {#if savedFeeds.length > 0}
-    <div class="saved">
-      <h5 class="saved-label">Saved shows</h5>
-      {#each savedFeeds as f (f.id)}
-        <div class="saved-item" class:active={loadedUrl === f.url}>
-          <button class="saved-load" onclick={() => fetchFeed(f.url)}>
-            {f.title || f.url}
-          </button>
-          <button
-            class="saved-remove"
-            onclick={() => removeFeed(f.id)}
-            aria-label="Remove saved show"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      {/each}
-    </div>
-  {/if}
-
   {#if show}
+    <button class="back-btn" onclick={clearShow}>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M15 18l-6-6 6-6" />
+      </svg>
+      Shows
+    </button>
+
     <div class="show-head">
       <div class="show-meta">
         <h4>{show.title}</h4>
@@ -194,6 +173,57 @@
         </li>
       {/each}
     </ul>
+  {:else}
+    <form
+      class="feed-row"
+      onsubmit={(e) => {
+        e.preventDefault();
+        fetchFeed();
+      }}
+    >
+      <input
+        type="url"
+        bind:value={feedUrl}
+        placeholder="Paste an RSS feed URL"
+        aria-label="RSS feed URL"
+      />
+      <button type="submit" disabled={loading || !feedUrl.trim()}>
+        {loading ? "Loading..." : "Load"}
+      </button>
+    </form>
+
+    {#if savedFeeds.length > 0}
+      <h5 class="saved-label">Saved shows</h5>
+      {#if savedFeeds.length > 6}
+        <input
+          class="saved-filter"
+          bind:value={savedFilter}
+          placeholder="Filter saved shows"
+          aria-label="Filter saved shows"
+        />
+      {/if}
+      <div class="saved-list">
+        {#each filteredSaved as f (f.id)}
+          <div class="saved-item">
+            <button class="saved-load" onclick={() => fetchFeed(f.url)}>
+              {f.title || f.url}
+            </button>
+            <button
+              class="saved-remove"
+              onclick={() => removeFeed(f.id)}
+              aria-label="Remove saved show"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        {/each}
+        {#if filteredSaved.length === 0}
+          <p class="saved-empty">No saved shows match.</p>
+        {/if}
+      </div>
+    {/if}
   {/if}
 </SidePanel>
 
@@ -248,8 +278,25 @@
     margin-bottom: 1rem;
   }
 
-  .saved {
-    margin-bottom: 1.25rem;
+  .back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 0.85rem;
+    padding: 0.35rem 0.5rem 0.35rem 0.35rem;
+    margin-bottom: 0.85rem;
+    border-radius: var(--radius-sm);
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .back-btn:hover {
+    background: var(--tint);
+    color: var(--text);
   }
 
   .saved-label {
@@ -260,15 +307,41 @@
     margin-bottom: 0.5rem;
   }
 
+  .saved-filter {
+    width: 100%;
+    padding: 0.5rem 0.7rem;
+    margin-bottom: 0.5rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: var(--radius);
+    font-size: 0.85rem;
+    font-family: inherit;
+  }
+
+  .saved-filter:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+
+  .saved-list {
+    max-height: 46vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .saved-empty {
+    color: var(--text-faint);
+    font-size: 0.85rem;
+    padding: 0.5rem;
+  }
+
   .saved-item {
     display: flex;
     align-items: center;
     gap: 0.25rem;
     border-radius: var(--radius);
-  }
-
-  .saved-item.active {
-    background: var(--accent-soft);
   }
 
   .saved-load {
