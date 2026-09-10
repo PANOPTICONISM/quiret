@@ -20,6 +20,15 @@ type Chapter struct {
 	Start float64 `json:"start"` // start offset in seconds
 }
 
+// Feed is a saved podcast RSS subscription.
+type Feed struct {
+	ID      string    `json:"id"`
+	URL     string    `json:"url"`
+	Title   string    `json:"title"`
+	Image   string    `json:"image"`
+	AddedAt time.Time `json:"addedAt"`
+}
+
 type Annotation struct {
 	ID        string    `json:"id"`
 	BookID    string    `json:"bookId"`

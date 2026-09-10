@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
@@ -19,6 +20,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/gorilla/mux"
 )
 
 const (
@@ -115,38 +117,40 @@ func httpGet(client *http.Client, ctx context.Context, rawURL string) (*http.Res
 	return client.Do(req)
 }
 
-// GetPodcastEpisodes fetches and parses an RSS feed, returning show info and a
-// capped list of episodes with playable audio enclosures.
-func GetPodcastEpisodes(w http.ResponseWriter, r *http.Request) {
-	feedURL, err := validatePublicURL(r.URL.Query().Get("url"))
+// loadFeed validates, fetches and parses an RSS feed, returning the canonical URL.
+func loadFeed(ctx context.Context, rawURL string) (string, *rssFeed, error) {
+	feedURL, err := validatePublicURL(rawURL)
 	if err != nil {
-		http.Error(w, "Invalid feed URL", http.StatusBadRequest)
-		return
+		return "", nil, err
 	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
-	defer cancel()
-
 	resp, err := httpGet(feedClient, ctx, feedURL)
 	if err != nil {
-		http.Error(w, "Failed to fetch feed", http.StatusBadGateway)
-		return
+		return feedURL, nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		http.Error(w, "Feed returned an error", http.StatusBadGateway)
-		return
+		return feedURL, nil, fmt.Errorf("feed status %d", resp.StatusCode)
 	}
-
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxFeedBytes))
 	if err != nil {
-		http.Error(w, "Failed to read feed", http.StatusBadGateway)
-		return
+		return feedURL, nil, err
 	}
-
 	var feed rssFeed
 	if err := xml.Unmarshal(data, &feed); err != nil {
-		http.Error(w, "Failed to parse feed", http.StatusBadRequest)
+		return feedURL, nil, err
+	}
+	return feedURL, &feed, nil
+}
+
+// GetPodcastEpisodes fetches and parses an RSS feed, returning show info and a
+// capped list of episodes with playable audio enclosures.
+func GetPodcastEpisodes(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	feedURL, feed, err := loadFeed(ctx, r.URL.Query().Get("url"))
+	if err != nil {
+		http.Error(w, "Could not load feed. Check the URL.", http.StatusBadRequest)
 		return
 	}
 
@@ -171,11 +175,95 @@ func GetPodcastEpisodes(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
+		"feedUrl":  feedURL,
 		"title":    strings.TrimSpace(feed.Channel.Title),
 		"author":   strings.TrimSpace(feed.Channel.Author),
 		"image":    showImage,
 		"episodes": episodes,
 	})
+}
+
+// ListFeeds returns the saved podcast subscriptions.
+func ListFeeds(w http.ResponseWriter, r *http.Request) {
+	rows, err := db.DB.Query("SELECT id, url, title, image, added_at FROM feeds ORDER BY title COLLATE NOCASE")
+	if err != nil {
+		http.Error(w, "Failed to fetch feeds", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	feeds := make([]models.Feed, 0)
+	for rows.Next() {
+		var f models.Feed
+		var title, image sql.NullString
+		if err := rows.Scan(&f.ID, &f.URL, &title, &image, &f.AddedAt); err != nil {
+			continue
+		}
+		f.Title = title.String
+		f.Image = image.String
+		feeds = append(feeds, f)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(feeds)
+}
+
+// AddFeed saves (or refreshes) a podcast subscription, fetching its title/image.
+func AddFeed(w http.ResponseWriter, r *http.Request) {
+	var payload struct {
+		URL string `json:"url"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	feedURL, feed, err := loadFeed(ctx, payload.URL)
+	if err != nil {
+		http.Error(w, "Could not load feed. Check the URL.", http.StatusBadRequest)
+		return
+	}
+
+	title := strings.TrimSpace(feed.Channel.Title)
+	image := firstNonEmpty(feed.Channel.Image.Href, feed.Channel.Image.URL)
+
+	_, err = db.DB.Exec(
+		`INSERT INTO feeds (id, url, title, image, added_at) VALUES (?, ?, ?, ?, ?)
+		 ON CONFLICT(url) DO UPDATE SET title = excluded.title, image = excluded.image`,
+		uuid.New().String(), feedURL, title, image, time.Now(),
+	)
+	if err != nil {
+		http.Error(w, "Failed to save feed", http.StatusInternalServerError)
+		return
+	}
+
+	var f models.Feed
+	var t, im sql.NullString
+	if err := db.DB.QueryRow(
+		"SELECT id, url, title, image, added_at FROM feeds WHERE url = ?", feedURL,
+	).Scan(&f.ID, &f.URL, &t, &im, &f.AddedAt); err != nil {
+		http.Error(w, "Failed to load saved feed", http.StatusInternalServerError)
+		return
+	}
+	f.Title = t.String
+	f.Image = im.String
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(f)
+}
+
+// DeleteFeed removes a saved subscription.
+func DeleteFeed(w http.ResponseWriter, r *http.Request) {
+	id := mux.Vars(r)["id"]
+	if _, err := db.DB.Exec("DELETE FROM feeds WHERE id = ?", id); err != nil {
+		http.Error(w, "Failed to delete feed", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
 }
 
 // DownloadPodcastEpisode downloads an episode's audio into the library as an

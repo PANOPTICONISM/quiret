@@ -60,6 +60,19 @@ func InitDB(dataPath string) error {
 	}
 
 	_, err = DB.Exec(`
+		CREATE TABLE IF NOT EXISTS feeds (
+			id TEXT PRIMARY KEY,
+			url TEXT NOT NULL UNIQUE,
+			title TEXT,
+			image TEXT,
+			added_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
+	`)
+	if err != nil {
+		log.Printf("Feeds table warning: %v", err)
+	}
+
+	_, err = DB.Exec(`
 		CREATE TABLE IF NOT EXISTS annotations (
 			id TEXT PRIMARY KEY,
 			book_id TEXT NOT NULL,

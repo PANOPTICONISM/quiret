@@ -1,4 +1,5 @@
 <script>
+  import { onMount } from "svelte";
   import SidePanel from "./SidePanel.svelte";
 
   let { onClose, onAdded } = $props();
@@ -6,28 +7,70 @@
   let feedUrl = $state("");
   let loading = $state(false);
   let error = $state(null);
-  let show = $state(null); // { title, author, image, episodes }
+  let show = $state(null); // { feedUrl, title, author, image, episodes }
+  let loadedUrl = $state(null); // canonical URL of the loaded show
   let savingUrl = $state(null);
   let saved = $state(new Set());
 
-  const fetchFeed = async () => {
-    const url = feedUrl.trim();
-    if (!url) return;
+  let savedFeeds = $state([]);
+  let savingFeed = $state(false);
+
+  const currentSaved = $derived(
+    !!loadedUrl && savedFeeds.some((f) => f.url === loadedUrl),
+  );
+
+  const loadSavedFeeds = async () => {
+    try {
+      const res = await fetch("/api/podcasts/feeds");
+      if (res.ok) savedFeeds = await res.json();
+    } catch {}
+  };
+
+  onMount(loadSavedFeeds);
+
+  const fetchFeed = async (url) => {
+    const target = (url ?? feedUrl).trim();
+    if (!target) return;
+    feedUrl = target;
     loading = true;
     error = null;
     show = null;
     try {
       const res = await fetch(
-        `/api/podcasts/episodes?url=${encodeURIComponent(url)}`,
+        `/api/podcasts/episodes?url=${encodeURIComponent(target)}`,
       );
       if (!res.ok) throw new Error("Couldn't load that feed. Check the URL.");
       show = await res.json();
+      loadedUrl = show.feedUrl || target;
       if (!show.episodes?.length) error = "No episodes found in this feed.";
     } catch (e) {
       error = e.message || "Failed to load feed";
     } finally {
       loading = false;
     }
+  };
+
+  const saveFeed = async () => {
+    if (!loadedUrl || savingFeed) return;
+    savingFeed = true;
+    try {
+      const res = await fetch("/api/podcasts/feeds", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: loadedUrl }),
+      });
+      if (res.ok) await loadSavedFeeds();
+    } catch {
+    } finally {
+      savingFeed = false;
+    }
+  };
+
+  const removeFeed = async (id) => {
+    try {
+      const res = await fetch(`/api/podcasts/feeds/${id}`, { method: "DELETE" });
+      if (res.ok) savedFeeds = savedFeeds.filter((f) => f.id !== id);
+    } catch {}
   };
 
   const addEpisode = async (ep) => {
@@ -68,7 +111,7 @@
   };
 </script>
 
-<SidePanel title="Add from podcast" labelId="podcast-title" {onClose}>
+<SidePanel title="Podcasts" labelId="podcast-title" {onClose}>
   <form
     class="feed-row"
     onsubmit={(e) => {
@@ -91,12 +134,41 @@
     <p class="error">{error}</p>
   {/if}
 
+  {#if savedFeeds.length > 0}
+    <div class="saved">
+      <h5 class="saved-label">Saved shows</h5>
+      {#each savedFeeds as f (f.id)}
+        <div class="saved-item" class:active={loadedUrl === f.url}>
+          <button class="saved-load" onclick={() => fetchFeed(f.url)}>
+            {f.title || f.url}
+          </button>
+          <button
+            class="saved-remove"
+            onclick={() => removeFeed(f.id)}
+            aria-label="Remove saved show"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      {/each}
+    </div>
+  {/if}
+
   {#if show}
     <div class="show-head">
-      <div>
+      <div class="show-meta">
         <h4>{show.title}</h4>
         {#if show.author}<p class="show-author">{show.author}</p>{/if}
       </div>
+      {#if currentSaved}
+        <span class="saved-badge">Saved</span>
+      {:else}
+        <button class="save-feed-btn" onclick={saveFeed} disabled={savingFeed}>
+          {savingFeed ? "Saving..." : "Save show"}
+        </button>
+      {/if}
     </div>
 
     <ul class="episodes">
@@ -176,13 +248,80 @@
     margin-bottom: 1rem;
   }
 
+  .saved {
+    margin-bottom: 1.25rem;
+  }
+
+  .saved-label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-faint);
+    margin-bottom: 0.5rem;
+  }
+
+  .saved-item {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    border-radius: var(--radius);
+  }
+
+  .saved-item.active {
+    background: var(--accent-soft);
+  }
+
+  .saved-load {
+    flex: 1;
+    min-width: 0;
+    text-align: left;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0.55rem 0.6rem;
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.9rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: background 0.15s;
+  }
+
+  .saved-load:hover {
+    background: var(--tint);
+  }
+
+  .saved-remove {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-faint);
+    padding: 0.4rem;
+    border-radius: var(--radius-sm);
+    display: flex;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .saved-remove:hover {
+    background: var(--tint);
+    color: var(--danger);
+  }
+
   .show-head {
     display: flex;
-    gap: 0.75rem;
     align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
     margin-bottom: 1rem;
     padding-bottom: 1rem;
     border-bottom: 1px solid var(--border);
+  }
+
+  .show-meta {
+    min-width: 0;
   }
 
   .show-head h4 {
@@ -196,6 +335,35 @@
     font-size: 0.8rem;
     color: var(--text-muted);
     margin-top: 0.15rem;
+  }
+
+  .save-feed-btn {
+    flex-shrink: 0;
+    padding: 0.4rem 0.8rem;
+    font-size: 0.82rem;
+    border: 1px solid var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s;
+  }
+
+  .save-feed-btn:hover:not(:disabled) {
+    background: var(--accent);
+    color: white;
+  }
+
+  .save-feed-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .saved-badge {
+    flex-shrink: 0;
+    font-size: 0.8rem;
+    color: var(--text-muted);
   }
 
   .episodes {
