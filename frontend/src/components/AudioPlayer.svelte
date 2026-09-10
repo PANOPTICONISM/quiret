@@ -11,13 +11,33 @@
   let playing = $state(false);
   let currentTime = $state(0);
   let duration = $state(0);
-  let playbackRate = $state(1);
+  // Initialise from the saved speed synchronously so it's applied even if the
+  // audio's loadedmetadata event fires before onMount runs.
+  let playbackRate = $state(
+    (() => {
+      try {
+        const r = parseFloat(localStorage.getItem("audioPlaybackRate"));
+        if (SPEEDS.includes(r)) return r;
+      } catch {}
+      return 1;
+    })(),
+  );
   let chapters = $state([]);
   let showChapters = $state(false);
   let error = $state(null);
 
   let seeking = false; // true while the user drags the scrubber
-  let resumePosition = 0;
+  // Parse the resume position at init (not in onMount) so it's ready before the
+  // audio element's loadedmetadata event can fire on a fast/cached load.
+  let resumePosition = (() => {
+    try {
+      if (metadata?.readingProgress) {
+        const p = JSON.parse(metadata.readingProgress);
+        if (p.type === "audio" && p.position) return p.position;
+      }
+    } catch {}
+    return 0;
+  })();
   let resumeApplied = false;
   let saveTimeout = null;
 
@@ -315,18 +335,6 @@
   };
 
   onMount(() => {
-    const savedRate = parseFloat(localStorage.getItem("audioPlaybackRate"));
-    if (SPEEDS.includes(savedRate)) playbackRate = savedRate;
-
-    if (metadata?.readingProgress) {
-      try {
-        const progress = JSON.parse(metadata.readingProgress);
-        if (progress.type === "audio" && progress.position) {
-          resumePosition = progress.position;
-        }
-      } catch {}
-    }
-
     fetch(`/api/books/${bookId}/chapters`)
       .then((res) => (res.ok ? res.json() : []))
       .then((data) => {
