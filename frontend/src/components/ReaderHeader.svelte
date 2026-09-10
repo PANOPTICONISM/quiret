@@ -10,7 +10,9 @@
     maxFontSize,
     isFullscreen,
     isTouchDevice,
+    hasToc = false,
     onClose,
+    onToggleToc,
     onToggleAnnotations,
     onBookmarkPage,
     onIncreaseFontSize,
@@ -54,6 +56,22 @@
     Back to Library
   </button>
   <div class="header-controls">
+    {#if hasToc}
+      <button
+        class="annotations-btn"
+        onclick={onToggleToc}
+        aria-label="Table of contents"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="8" y1="6" x2="21" y2="6" />
+          <line x1="8" y1="12" x2="21" y2="12" />
+          <line x1="8" y1="18" x2="21" y2="18" />
+          <line x1="3" y1="6" x2="3.01" y2="6" />
+          <line x1="3" y1="12" x2="3.01" y2="12" />
+          <line x1="3" y1="18" x2="3.01" y2="18" />
+        </svg>
+      </button>
+    {/if}
     {#if fileType === "cbz"}
       <button
         class="annotations-btn"

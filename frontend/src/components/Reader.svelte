@@ -7,6 +7,7 @@
   import AnnotationPanel from "./AnnotationPanel.svelte";
   import AnnotationsList from "./AnnotationsList.svelte";
   import AudioPlayer from "./AudioPlayer.svelte";
+  import TableOfContents from "./TableOfContents.svelte";
   import { FOLIATE_FORMATS, TEXT_FORMATS, AUDIO_FORMATS } from "../lib/constants.js";
   import {
     drawPDFHighlightsForPage,
@@ -45,6 +46,8 @@
   let annotations = $state([]);
   let showAnnotationPanel = $state(false);
   let showAnnotationsList = $state(false);
+  let toc = $state([]);
+  let showToc = $state(false);
   let selectedText = $state(null);
 
   let selectedPosition = $state(null);
@@ -63,7 +66,42 @@
   };
   let pdfSelectionTimeout = null;
 
-  const anyPanelOpen = $derived(showAnnotationPanel || showAnnotationsList);
+  const anyPanelOpen = $derived(
+    showAnnotationPanel || showAnnotationsList || showToc,
+  );
+
+  const flattenToc = (nodes, level = 0, out = []) => {
+    for (const n of nodes || []) {
+      out.push({ label: (n.label || "").trim(), href: n.href, level });
+      if (n.subitems?.length) flattenToc(n.subitems, level + 1, out);
+    }
+    return out;
+  };
+
+  const flattenPdfOutline = (nodes, level = 0, out = []) => {
+    for (const n of nodes || []) {
+      out.push({ label: (n.title || "").trim(), dest: n.dest, level });
+      if (n.items?.length) flattenPdfOutline(n.items, level + 1, out);
+    }
+    return out;
+  };
+
+  const goToPdfDest = async (dest) => {
+    if (!pdfDoc || !dest) return;
+    try {
+      let d = dest;
+      if (typeof d === "string") d = await pdfDoc.getDestination(d);
+      if (!Array.isArray(d) || d.length === 0) return;
+      const pageIndex = await pdfDoc.getPageIndex(d[0]);
+      renderPDFPage(pageIndex + 1);
+    } catch (e) {}
+  };
+
+  const handleGoToTocItem = (item) => {
+    if (bookMetadata?.fileType === "pdf") goToPdfDest(item.dest);
+    else view?.goTo(item.href);
+    showToc = false;
+  };
 
   $effect(() => {
     if (anyPanelOpen) {
@@ -330,6 +368,7 @@
     if (event.key === "Escape") {
       if (showAnnotationPanel) closeAnnotationPanel();
       else if (showAnnotationsList) showAnnotationsList = false;
+      else if (showToc) showToc = false;
       else onClose();
       return;
     }
@@ -344,6 +383,12 @@
       pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
       totalPages = pdfDoc.numPages;
       totalLocations = totalPages;
+
+      try {
+        toc = flattenPdfOutline(await pdfDoc.getOutline());
+      } catch (e) {
+        toc = [];
+      }
 
       let startPage = 1;
       if (bookMetadata.readingProgress) {
@@ -578,6 +623,11 @@
       view
         .open(file)
         .then(() => {
+          try {
+            toc = flattenToc(view.book?.toc);
+          } catch (e) {
+            toc = [];
+          }
           if (bookMetadata.readingProgress) {
             try {
               const progress = JSON.parse(bookMetadata.readingProgress);
@@ -647,7 +697,9 @@
       maxFontSize={MAX_FONT_SIZE}
       {isFullscreen}
       {isTouchDevice}
+      hasToc={toc.length > 0}
       {onClose}
+      onToggleToc={() => (showToc = !showToc)}
       onToggleAnnotations={() => (showAnnotationsList = !showAnnotationsList)}
       onBookmarkPage={bookmarkCurrentPage}
       onIncreaseFontSize={increaseFontSize}
@@ -696,6 +748,13 @@
       onGoTo={handleGoToAnnotation}
       onDelete={deleteAnnotation}
       onClose={() => (showAnnotationsList = false)}
+    />
+  {/if}
+  {#if showToc}
+    <TableOfContents
+      items={toc}
+      onGoTo={handleGoToTocItem}
+      onClose={() => (showToc = false)}
     />
   {/if}
 </div>
