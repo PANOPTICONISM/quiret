@@ -309,6 +309,19 @@
             class="search-input"
           />
         </div>
+        {#if presentKinds.length > 1}
+          <div class="select-wrapper">
+            <select class="sort-select" bind:value={activeKind} aria-label="Filter by type">
+              <option value="All">All types</option>
+              {#each presentKinds as kind (kind)}
+                <option value={kind}>{kind}</option>
+              {/each}
+            </select>
+            <svg class="select-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </div>
+        {/if}
         <div class="select-wrapper">
           <select class="sort-select" bind:value={sortBy} aria-label="Sort books">
             <option value="added">Recently added</option>
@@ -399,27 +412,6 @@
       </div>
     </div>
   </header>
-
-  {#if presentKinds.length > 1}
-    <div class="filter-bar">
-      <button
-        class="chip"
-        class:active={activeKind === "All"}
-        onclick={() => (activeKind = "All")}
-      >
-        All
-      </button>
-      {#each presentKinds as kind (kind)}
-        <button
-          class="chip"
-          class:active={activeKind === kind}
-          onclick={() => (activeKind = kind)}
-        >
-          {kind}
-        </button>
-      {/each}
-    </div>
-  {/if}
 
   {#if !searchQuery.trim() && activeKind === "All" && continueBooks.length > 0}
     <section class="continue">
@@ -689,36 +681,6 @@
 
   @keyframes spin {
     to { transform: rotate(360deg); }
-  }
-
-  .filter-bar {
-    display: flex;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-    margin-bottom: 2rem;
-  }
-
-  .chip {
-    padding: 0.4rem 0.85rem;
-    border: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--text-muted);
-    border-radius: 999px;
-    font-size: 0.85rem;
-    font-family: inherit;
-    cursor: pointer;
-    transition: background 0.15s, color 0.15s, border-color 0.15s;
-  }
-
-  .chip:hover {
-    background: var(--tint);
-    color: var(--text);
-  }
-
-  .chip.active {
-    background: var(--accent);
-    color: white;
-    border-color: var(--accent);
   }
 
   .continue {
