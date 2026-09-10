@@ -158,6 +158,23 @@ func UploadBook(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(book)
 }
 
+// RescanBooks scans every configured book directory for newly added files and
+// returns how many were added.
+func RescanBooks(w http.ResponseWriter, r *http.Request) {
+	added := 0
+	for _, p := range BookPaths {
+		books, err := ScanDirectory(p)
+		if err != nil {
+			log.Printf("Rescan: failed to scan %s: %v", p, err)
+			continue
+		}
+		added += len(books)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]int{"added": added})
+}
+
 func GetBooks(w http.ResponseWriter, r *http.Request) {
 	rows, err := db.DB.Query("SELECT id, title, author, cover_path, file_path, file_size, file_type, added_at, reading_progress, progress_updated_at FROM books ORDER BY added_at DESC")
 	if err != nil {

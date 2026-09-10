@@ -13,6 +13,7 @@
   let books = $state([]);
   let loaded = $state(false);
   let uploading = $state(false);
+  let rescanning = $state(false);
   let darkMode = $state(false);
   let searchQuery = $state("");
   let sortBy = $state("added");
@@ -217,6 +218,19 @@
     document.getElementById("file-input")?.click();
   };
 
+  const rescan = async () => {
+    if (rescanning) return;
+    rescanning = true;
+    try {
+      const res = await fetch("/api/rescan", { method: "POST" });
+      if (res.ok) await fetchBooks();
+    } catch (error) {
+      console.error("Rescan failed:", error);
+    } finally {
+      rescanning = false;
+    }
+  };
+
   const handleBookSaved = (patch) => {
     if (!editingBook) return;
     const id = editingBook.id;
@@ -296,6 +310,28 @@
           </svg>
           <span class="upload-label">Upload</span>
         {/if}
+      </button>
+      <button
+        class="icon-btn"
+        onclick={rescan}
+        disabled={rescanning}
+        aria-label="Rescan folders for new books"
+        title="Rescan folders for new books"
+      >
+        <svg
+          class:spinning={rescanning}
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+          <polyline points="21 3 21 9 15 9" />
+        </svg>
       </button>
       <button
         class="icon-btn"
@@ -565,6 +601,15 @@
   .icon-btn:hover {
     background: var(--surface);
     color: var(--text);
+  }
+
+  .icon-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .spinning {
+    animation: spin 0.8s linear infinite;
   }
 
   .spinner-sm {

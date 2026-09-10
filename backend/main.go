@@ -90,6 +90,7 @@ func main() {
 	r.HandleFunc("/healthz", healthCheck).Methods("GET")
 
 	api := r.PathPrefix("/api").Subrouter()
+	api.HandleFunc("/rescan", handlers.RescanBooks).Methods("POST")
 	api.HandleFunc("/books", handlers.GetBooks).Methods("GET")
 	api.HandleFunc("/books", handlers.UploadBook).Methods("POST")
 	api.HandleFunc("/books/{id}", handlers.GetBook).Methods("GET")
