@@ -268,16 +268,29 @@
 
   const setupMediaSession = () => {
     if (!("mediaSession" in navigator)) return;
+
+    // Lock-screen artwork. Declare the cover as "any" size (its real dimensions
+    // vary, and a wrong size claim makes iOS pad the slot with white). Always
+    // append the square, full-bleed app icon as a reliable fallback so a
+    // cover-less book never shows a blank/white placeholder.
+    const artwork = [];
+    if (metadata?.coverPath) {
+      artwork.push({
+        src: `/api/books/${bookId}/cover`,
+        sizes: "any",
+        type: "image/jpeg",
+      });
+    }
+    artwork.push(
+      { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { src: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    );
+
     navigator.mediaSession.metadata = new MediaMetadata({
       title: metadata?.title || "Audiobook",
       artist: metadata?.author || "",
       album: metadata?.title || "",
-      artwork: metadata?.coverPath
-        ? [
-            { src: `/api/books/${bookId}/cover`, sizes: "256x256", type: "image/jpeg" },
-            { src: `/api/books/${bookId}/cover`, sizes: "512x512", type: "image/jpeg" },
-          ]
-        : [],
+      artwork,
     });
     const set = (action, handler) => {
       try {
