@@ -7,6 +7,7 @@
   } from "../lib/constants.js";
   import BookCard from "./BookCard.svelte";
   import BookEditModal from "./BookEditModal.svelte";
+  import PodcastModal from "./PodcastModal.svelte";
 
   let { onOpenBook } = $props();
 
@@ -19,6 +20,7 @@
   let sortBy = $state("added");
   let dragDepth = $state(0);
   let editingBook = $state(null);
+  let showPodcasts = $state(false);
 
   const isDragging = $derived(dragDepth > 0);
 
@@ -335,6 +337,18 @@
       </button>
       <button
         class="icon-btn"
+        onclick={() => (showPodcasts = true)}
+        aria-label="Add from podcast"
+        title="Add an episode from a podcast RSS feed"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 11a9 9 0 0 1 9 9" />
+          <path d="M4 4a16 16 0 0 1 16 16" />
+          <circle cx="5" cy="19" r="1" />
+        </svg>
+      </button>
+      <button
+        class="icon-btn"
         onclick={toggleDarkMode}
         aria-label="Toggle dark mode"
       >
@@ -419,6 +433,10 @@
     onClose={() => (editingBook = null)}
     onSaved={handleBookSaved}
   />
+{/if}
+
+{#if showPodcasts}
+  <PodcastModal onClose={() => (showPodcasts = false)} onAdded={fetchBooks} />
 {/if}
 
 {#if isDragging}

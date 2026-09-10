@@ -91,6 +91,8 @@ func main() {
 
 	api := r.PathPrefix("/api").Subrouter()
 	api.HandleFunc("/rescan", handlers.RescanBooks).Methods("POST")
+	api.HandleFunc("/podcasts/episodes", handlers.GetPodcastEpisodes).Methods("GET")
+	api.HandleFunc("/podcasts/download", handlers.DownloadPodcastEpisode).Methods("POST")
 	api.HandleFunc("/books", handlers.GetBooks).Methods("GET")
 	api.HandleFunc("/books", handlers.UploadBook).Methods("POST")
 	api.HandleFunc("/books/{id}", handlers.GetBook).Methods("GET")
