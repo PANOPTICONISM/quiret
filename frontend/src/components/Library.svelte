@@ -11,6 +11,7 @@
   let { onOpenBook } = $props();
 
   let books = $state([]);
+  let loaded = $state(false);
   let uploading = $state(false);
   let darkMode = $state(false);
   let searchQuery = $state("");
@@ -79,6 +80,8 @@
     } catch (error) {
       console.error("Failed to fetch books:", error);
       books = [];
+    } finally {
+      loaded = true;
     }
   };
 
@@ -340,7 +343,9 @@
     </section>
   {/if}
 
-  {#if filteredBooks.length > 0}
+  {#if !loaded}
+    <!-- Initial load: render nothing so the empty-library state never flashes. -->
+  {:else if filteredBooks.length > 0}
     <div class="books-grid">
       {#each filteredBooks as book (book.id)}
         <BookCard
