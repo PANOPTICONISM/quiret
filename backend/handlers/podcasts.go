@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"html"
 	"io"
 	"log"
 	"net"
@@ -16,6 +17,7 @@ import (
 	"path/filepath"
 	"quiret/db"
 	"quiret/models"
+	"regexp"
 	"strings"
 	"time"
 
@@ -45,11 +47,13 @@ type rssImage struct {
 }
 
 type rssItem struct {
-	Title     string `xml:"title"`
-	PubDate   string `xml:"pubDate"`
-	Duration  string `xml:"duration"` // itunes:duration
-	Image     rssImage `xml:"image"`
-	Enclosure struct {
+	Title       string   `xml:"title"`
+	PubDate     string   `xml:"pubDate"`
+	Duration    string   `xml:"duration"` // itunes:duration
+	Description string   `xml:"description"`
+	Summary     string   `xml:"summary"` // itunes:summary
+	Image       rssImage `xml:"image"`
+	Enclosure   struct {
 		URL  string `xml:"url,attr"`
 		Type string `xml:"type,attr"`
 	} `xml:"enclosure"`
@@ -65,11 +69,26 @@ type rssFeed struct {
 }
 
 type podcastEpisode struct {
-	Title    string `json:"title"`
-	AudioURL string `json:"audioUrl"`
-	PubDate  string `json:"pubDate"`
-	Duration string `json:"duration"`
-	Image    string `json:"image"`
+	Title       string `json:"title"`
+	AudioURL    string `json:"audioUrl"`
+	PubDate     string `json:"pubDate"`
+	Duration    string `json:"duration"`
+	Description string `json:"description"`
+	Image       string `json:"image"`
+}
+
+var htmlTagRe = regexp.MustCompile(`(?s)<[^>]*>`)
+
+// cleanDescription strips HTML tags/entities and collapses whitespace to plain
+// text, capped to a reasonable length.
+func cleanDescription(s string) string {
+	s = htmlTagRe.ReplaceAllString(s, " ")
+	s = html.UnescapeString(s)
+	s = strings.Join(strings.Fields(s), " ")
+	if r := []rune(s); len(r) > 2000 {
+		s = strings.TrimSpace(string(r[:2000])) + "…"
+	}
+	return strings.TrimSpace(s)
 }
 
 // validatePublicURL parses raw, requires http(s), and rejects hosts that resolve
@@ -162,11 +181,12 @@ func GetPodcastEpisodes(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		episodes = append(episodes, podcastEpisode{
-			Title:    strings.TrimSpace(it.Title),
-			AudioURL: audio,
-			PubDate:  strings.TrimSpace(it.PubDate),
-			Duration: strings.TrimSpace(it.Duration),
-			Image:    firstNonEmpty(it.Image.Href, showImage),
+			Title:       strings.TrimSpace(it.Title),
+			AudioURL:    audio,
+			PubDate:     strings.TrimSpace(it.PubDate),
+			Duration:    strings.TrimSpace(it.Duration),
+			Description: cleanDescription(firstNonEmpty(it.Description, it.Summary)),
+			Image:       firstNonEmpty(it.Image.Href, showImage),
 		})
 		if len(episodes) >= maxEpisodes {
 			break

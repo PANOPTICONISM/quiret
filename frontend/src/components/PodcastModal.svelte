@@ -11,6 +11,13 @@
   let loadedUrl = $state(null); // canonical URL of the loaded show
   let savingUrl = $state(null);
   let saved = $state(new Set());
+  let expanded = $state(new Set());
+
+  const toggleExpanded = (url) => {
+    const s = new Set(expanded);
+    s.has(url) ? s.delete(url) : s.add(url);
+    expanded = s;
+  };
 
   let savedFeeds = $state([]);
   let savingFeed = $state(false);
@@ -160,6 +167,22 @@
             <span class="ep-meta">
               {[fmtDate(ep.pubDate), ep.duration].filter(Boolean).join(" · ")}
             </span>
+            {#if ep.description}
+              <p
+                class="ep-desc"
+                class:clamped={!expanded.has(ep.audioUrl)}
+              >
+                {ep.description}
+              </p>
+              {#if ep.description.length > 120}
+                <button
+                  class="read-more"
+                  onclick={() => toggleExpanded(ep.audioUrl)}
+                >
+                  {expanded.has(ep.audioUrl) ? "Read less" : "Read more"}
+                </button>
+              {/if}
+            {/if}
           </div>
           {#if saved.has(ep.audioUrl)}
             <span class="added">Added</span>
@@ -482,15 +505,45 @@
 
   .episodes li {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 0.75rem;
-    padding: 0.7rem 0;
+    padding: 0.8rem 0;
     border-bottom: 1px solid var(--border);
   }
 
   .ep-info {
     flex: 1;
     min-width: 0;
+  }
+
+  .ep-desc {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    line-height: 1.45;
+    margin-top: 0.4rem;
+  }
+
+  .ep-desc.clamped {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .read-more {
+    background: none;
+    border: none;
+    padding: 0.2rem 0;
+    margin-top: 0.15rem;
+    color: var(--accent);
+    font-size: 0.78rem;
+    font-family: inherit;
+    cursor: pointer;
+  }
+
+  .read-more:hover {
+    text-decoration: underline;
   }
 
   .ep-title {
