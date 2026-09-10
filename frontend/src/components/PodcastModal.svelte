@@ -446,9 +446,9 @@
     flex-shrink: 0;
     padding: 0.4rem 0.8rem;
     font-size: 0.82rem;
-    border: 1px solid var(--accent);
-    background: var(--accent-soft);
-    color: var(--accent);
+    border: none;
+    background: var(--accent);
+    color: white;
     border-radius: var(--radius-sm);
     cursor: pointer;
     font-family: inherit;
@@ -456,8 +456,7 @@
   }
 
   .save-feed-btn:hover:not(:disabled) {
-    background: var(--accent);
-    color: white;
+    background: var(--accent-hover);
   }
 
   .save-feed-btn:disabled {
