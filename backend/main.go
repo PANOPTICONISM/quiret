@@ -87,7 +87,7 @@ func main() {
 	r.Use(securityMiddleware)
 	r.Use(corsMiddleware)
 
-	r.HandleFunc("/healthz", healthCheck).Methods("GET")
+	r.HandleFunc("/healthz", healthCheck).Methods("GET", "HEAD")
 
 	api := r.PathPrefix("/api").Subrouter()
 	api.HandleFunc("/rescan", handlers.RescanBooks).Methods("POST")

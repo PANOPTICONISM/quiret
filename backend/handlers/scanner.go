@@ -1,83 +1,77 @@
 package handlers
 
 import (
+	"io/fs"
+	"log"
+	"path/filepath"
 	"quiret/db"
 	"quiret/models"
-	"log"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 )
 
-// ScanDirectory scans a directory for book files and adds them to the database.
-// Returns the list of added books and any error encountered.
-func ScanDirectory(booksDir string) ([]models.Book, error) {
-	entries, err := os.ReadDir(booksDir)
-	if err != nil {
-		return nil, err
-	}
+var supportedBookTypes = map[string]string{
+	".epub": "epub",
+	".pdf":  "pdf",
+	".fb2":  "fb2",
+	".cbz":  "cbz",
+	".mp3":  "mp3",
+	".m4b":  "m4b",
+	".m4a":  "m4a",
+	".aac":  "aac",
+	".ogg":  "ogg",
+	".opus": "opus",
+}
 
+// ScanDirectory walks a directory tree for book files and adds new ones to the
+// database. Returns the list of added books and any error encountered.
+func ScanDirectory(booksDir string) ([]models.Book, error) {
 	var addedBooks []models.Book
 
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-
-		filename := entry.Name()
-		filePath := filepath.Join(booksDir, filename)
-
-		// Check if it's a supported format
-		supportedTypes := map[string]string{
-			".epub": "epub",
-			".pdf":  "pdf",
-			".fb2":  "fb2",
-			".cbz":  "cbz",
-			".mp3":  "mp3",
-			".m4b":  "m4b",
-			".m4a":  "m4a",
-			".aac":  "aac",
-			".ogg":  "ogg",
-			".opus": "opus",
-		}
-		ext := strings.ToLower(filepath.Ext(filename))
-		fileType, ok := supportedTypes[ext]
-		if !ok {
-			continue
-		}
-
-		// Check if book already exists in database by file path
-		var existingID string
-		err := db.DB.QueryRow(
-			"SELECT id FROM books WHERE file_path = ?",
-			filePath,
-		).Scan(&existingID)
-
-		if err == nil {
-			// Book already exists
-			continue
-		}
-
-		// Get file info
-		info, err := os.Stat(filePath)
+	walkErr := filepath.WalkDir(booksDir, func(filePath string, d fs.DirEntry, err error) error {
 		if err != nil {
-			log.Printf("Failed to stat file %s: %v", filename, err)
-			continue
+			// Unreadable entry (permissions, vanished file): log and keep going.
+			log.Printf("Scan: skipping %s: %v", filePath, err)
+			if d != nil && d.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
 		}
 
-		// Generate unique ID for the book
+		if d.IsDir() {
+			// Skip hidden directories (e.g. .git, .Trash) but not the root itself.
+			if filePath != booksDir && strings.HasPrefix(d.Name(), ".") {
+				return fs.SkipDir
+			}
+			return nil
+		}
+
+		filename := d.Name()
+		ext := strings.ToLower(filepath.Ext(filename))
+		fileType, ok := supportedBookTypes[ext]
+		if !ok {
+			return nil
+		}
+
+		// Already in the database (by absolute file path)?
+		var existingID string
+		if err := db.DB.QueryRow("SELECT id FROM books WHERE file_path = ?", filePath).Scan(&existingID); err == nil {
+			return nil
+		}
+
+		info, err := d.Info()
+		if err != nil {
+			log.Printf("Failed to stat file %s: %v", filePath, err)
+			return nil
+		}
+
 		bookID := uuid.New().String()
-
-		// Extract metadata using shared functions
-		var title, author, coverPath string
-
 		originalName := strings.TrimSuffix(filename, filepath.Ext(filename))
-
 		storageDir := filepath.Join(DataPath, "books", bookID)
 
+		var title, author, coverPath string
 		switch fileType {
 		case "epub":
 			title, author, coverPath = ExtractEPUBMetadata(filePath, storageDir, originalName)
@@ -86,7 +80,6 @@ func ScanDirectory(booksDir string) ([]models.Book, error) {
 			coverPath = ExtractPDFCover(filePath, storageDir, bookID)
 		case "cbz":
 			title = originalName
-			author = ""
 			coverPath = ExtractCBZCover(filePath, storageDir)
 		case "fb2":
 			title, author, coverPath = ExtractFB2Metadata(filePath, storageDir, originalName)
@@ -94,7 +87,6 @@ func ScanDirectory(booksDir string) ([]models.Book, error) {
 			title, author, coverPath = ExtractAudioMetadata(filePath, storageDir, originalName)
 		default:
 			title = originalName
-			author = ""
 		}
 
 		book := models.Book{
@@ -108,27 +100,21 @@ func ScanDirectory(booksDir string) ([]models.Book, error) {
 			AddedAt:   time.Now(),
 		}
 
-		// Insert into database
-		_, err = db.DB.Exec(
+		if _, err := db.DB.Exec(
 			"INSERT INTO books (id, title, author, cover_path, file_path, file_size, file_type, added_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-			book.ID,
-			book.Title,
-			book.Author,
-			book.CoverPath,
-			book.FilePath,
-			book.FileSize,
-			book.FileType,
-			book.AddedAt,
-		)
-
-		if err != nil {
+			book.ID, book.Title, book.Author, book.CoverPath, book.FilePath, book.FileSize, book.FileType, book.AddedAt,
+		); err != nil {
 			log.Printf("Failed to insert book %s: %v", title, err)
-			continue
+			return nil
 		}
 
 		addedBooks = append(addedBooks, book)
 		log.Printf("Added book: %s by %s", title, author)
-	}
+		return nil
+	})
 
+	if walkErr != nil {
+		return addedBooks, walkErr
+	}
 	return addedBooks, nil
 }
