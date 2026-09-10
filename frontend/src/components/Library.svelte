@@ -4,6 +4,7 @@
     SUPPORTED_EXTENSIONS,
     FILE_ACCEPT,
     FOLIATE_FORMATS,
+    AUDIO_FORMATS,
   } from "../lib/constants.js";
   import BookCard from "./BookCard.svelte";
   import BookEditModal from "./BookEditModal.svelte";
@@ -21,12 +22,37 @@
   let dragDepth = $state(0);
   let editingBook = $state(null);
   let showPodcasts = $state(false);
+  let activeKind = $state("All");
 
   const isDragging = $derived(dragDepth > 0);
+
+  const KIND_ORDER = ["Ebooks", "Audiobooks", "Podcasts", "PDFs", "Comics"];
+
+  const kindOf = (book) => {
+    const t = book.fileType;
+    if (AUDIO_FORMATS.includes(t))
+      return book.source === "podcast" ? "Podcasts" : "Audiobooks";
+    if (t === "pdf") return "PDFs";
+    if (t === "cbz") return "Comics";
+    return "Ebooks";
+  };
+
+  const presentKinds = $derived.by(() => {
+    const set = new Set(books.map(kindOf));
+    return KIND_ORDER.filter((k) => set.has(k));
+  });
+
+  // Reset the filter if the active kind disappears (e.g. last of a kind deleted).
+  $effect(() => {
+    if (activeKind !== "All" && !presentKinds.includes(activeKind)) {
+      activeKind = "All";
+    }
+  });
 
   const filteredBooks = $derived.by(() => {
     const q = searchQuery.trim().toLowerCase();
     let list = books;
+    if (activeKind !== "All") list = list.filter((b) => kindOf(b) === activeKind);
     if (q) {
       list = list.filter(
         (b) =>
@@ -374,7 +400,28 @@
     </div>
   </header>
 
-  {#if !searchQuery.trim() && continueBooks.length > 0}
+  {#if presentKinds.length > 1}
+    <div class="filter-bar">
+      <button
+        class="chip"
+        class:active={activeKind === "All"}
+        onclick={() => (activeKind = "All")}
+      >
+        All
+      </button>
+      {#each presentKinds as kind (kind)}
+        <button
+          class="chip"
+          class:active={activeKind === kind}
+          onclick={() => (activeKind = kind)}
+        >
+          {kind}
+        </button>
+      {/each}
+    </div>
+  {/if}
+
+  {#if !searchQuery.trim() && activeKind === "All" && continueBooks.length > 0}
     <section class="continue">
       <h2 class="section-title">Continue</h2>
       <div class="continue-row">
@@ -642,6 +689,36 @@
 
   @keyframes spin {
     to { transform: rotate(360deg); }
+  }
+
+  .filter-bar {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 2rem;
+  }
+
+  .chip {
+    padding: 0.4rem 0.85rem;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-muted);
+    border-radius: 999px;
+    font-size: 0.85rem;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+
+  .chip:hover {
+    background: var(--tint);
+    color: var(--text);
+  }
+
+  .chip.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
   }
 
   .continue {

@@ -59,6 +59,12 @@ func InitDB(dataPath string) error {
 		log.Printf("Migration warning: %v", err)
 	}
 
+	// Migration: Add source column (e.g. "podcast" for downloaded episodes)
+	_, err = DB.Exec(`ALTER TABLE books ADD COLUMN source TEXT`)
+	if err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
+		log.Printf("Migration warning: %v", err)
+	}
+
 	_, err = DB.Exec(`
 		CREATE TABLE IF NOT EXISTS feeds (
 			id TEXT PRIMARY KEY,

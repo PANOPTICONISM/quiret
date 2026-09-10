@@ -371,12 +371,13 @@ func DownloadPodcastEpisode(w http.ResponseWriter, r *http.Request) {
 		FilePath:  filePath,
 		FileSize:  n,
 		FileType:  fileType,
+		Source:    "podcast",
 		AddedAt:   time.Now(),
 	}
 
 	_, err = db.DB.Exec(
-		"INSERT INTO books (id, title, author, cover_path, file_path, file_size, file_type, added_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-		book.ID, book.Title, book.Author, book.CoverPath, book.FilePath, book.FileSize, book.FileType, book.AddedAt,
+		"INSERT INTO books (id, title, author, cover_path, file_path, file_size, file_type, source, added_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		book.ID, book.Title, book.Author, book.CoverPath, book.FilePath, book.FileSize, book.FileType, book.Source, book.AddedAt,
 	)
 	if err != nil {
 		os.RemoveAll(storageDir)

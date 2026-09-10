@@ -176,7 +176,7 @@ func RescanBooks(w http.ResponseWriter, r *http.Request) {
 }
 
 func GetBooks(w http.ResponseWriter, r *http.Request) {
-	rows, err := db.DB.Query("SELECT id, title, author, cover_path, file_path, file_size, file_type, added_at, reading_progress, progress_updated_at FROM books ORDER BY added_at DESC")
+	rows, err := db.DB.Query("SELECT id, title, author, cover_path, file_path, file_size, file_type, source, added_at, reading_progress, progress_updated_at FROM books ORDER BY added_at DESC")
 	if err != nil {
 		http.Error(w, "Failed to fetch books", http.StatusInternalServerError)
 		return
@@ -186,13 +186,14 @@ func GetBooks(w http.ResponseWriter, r *http.Request) {
 	books := make([]models.Book, 0)
 	for rows.Next() {
 		var book models.Book
-		var readingProgress sql.NullString
+		var source, readingProgress sql.NullString
 		var progressUpdatedAt sql.NullTime
-		err := rows.Scan(&book.ID, &book.Title, &book.Author, &book.CoverPath, &book.FilePath, &book.FileSize, &book.FileType, &book.AddedAt, &readingProgress, &progressUpdatedAt)
+		err := rows.Scan(&book.ID, &book.Title, &book.Author, &book.CoverPath, &book.FilePath, &book.FileSize, &book.FileType, &source, &book.AddedAt, &readingProgress, &progressUpdatedAt)
 		if err != nil {
 			log.Println("Scan error:", err)
 			continue
 		}
+		book.Source = source.String
 		if readingProgress.Valid {
 			book.ReadingProgress = readingProgress.String
 		}
@@ -211,18 +212,19 @@ func GetBook(w http.ResponseWriter, r *http.Request) {
 	bookID := vars["id"]
 
 	var book models.Book
-	var readingProgress sql.NullString
+	var source, readingProgress sql.NullString
 	var progressUpdatedAt sql.NullTime
 	err := db.DB.QueryRow(
-		"SELECT id, title, author, cover_path, file_path, file_size, file_type, added_at, reading_progress, progress_updated_at FROM books WHERE id = ?",
+		"SELECT id, title, author, cover_path, file_path, file_size, file_type, source, added_at, reading_progress, progress_updated_at FROM books WHERE id = ?",
 		bookID,
-	).Scan(&book.ID, &book.Title, &book.Author, &book.CoverPath, &book.FilePath, &book.FileSize, &book.FileType, &book.AddedAt, &readingProgress, &progressUpdatedAt)
+	).Scan(&book.ID, &book.Title, &book.Author, &book.CoverPath, &book.FilePath, &book.FileSize, &book.FileType, &source, &book.AddedAt, &readingProgress, &progressUpdatedAt)
 
 	if err != nil {
 		http.Error(w, "Book not found", http.StatusNotFound)
 		return
 	}
 
+	book.Source = source.String
 	if readingProgress.Valid {
 		book.ReadingProgress = readingProgress.String
 	}
