@@ -20,6 +20,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf16"
 
 	"github.com/dhowden/tag"
 	"golang.org/x/image/draw"
@@ -443,8 +444,9 @@ func ExtractAudioMetadata(audioPath, coverDir, fallbackTitle string) (title, aut
 }
 
 // ExtractAudioChapters returns embedded chapter markers for MP4-based audiobooks
-// (.m4b/.m4a) by parsing the Nero-style "chpl" atom (moov > udta > chpl). Returns
-// nil for formats without embedded chapters or when none are found.
+// (.m4b/.m4a). It first tries the Nero-style "chpl" atom (moov > udta > chpl), then
+// falls back to a QuickTime/MP4 chapter text track. Returns nil for formats without
+// embedded chapters or when none are found.
 func ExtractAudioChapters(audioPath string) []models.Chapter {
 	ext := strings.ToLower(filepath.Ext(audioPath))
 	if ext != ".m4b" && ext != ".m4a" && ext != ".mp4" {
@@ -467,35 +469,42 @@ func ExtractAudioChapters(audioPath string) []models.Chapter {
 	if !ok {
 		return nil
 	}
-	udtaStart, udtaEnd, ok := findMP4Atom(file, moovStart, moovEnd, "udta")
+
+	if ch := neroChapters(file, moovStart, moovEnd); len(ch) > 0 {
+		return ch
+	}
+	if ch := textTrackChapters(file, moovStart, moovEnd); len(ch) > 0 {
+		return ch
+	}
+	return nil
+}
+
+// neroChapters reads a Nero-style "chpl" chapter list (moov > udta > chpl).
+func neroChapters(r io.ReaderAt, moovStart, moovEnd int64) []models.Chapter {
+	cs, ce, ok := findMP4Path(r, moovStart, moovEnd, "udta", "chpl")
 	if !ok {
 		return nil
 	}
-	chplStart, chplEnd, ok := findMP4Atom(file, udtaStart, udtaEnd, "chpl")
+	buf, ok := readBox(r, cs, ce, 1<<20)
 	if !ok {
 		return nil
 	}
-
-	n := chplEnd - chplStart
-	if n <= 0 || n > 1<<20 { // chapter lists are small; guard against bad sizes
-		return nil
-	}
-	buf := make([]byte, n)
-	if _, err := file.ReadAt(buf, chplStart); err != nil {
-		return nil
-	}
-
 	return parseChplAtom(buf)
 }
 
-// findMP4Atom iterates the MP4 boxes within [start, end) and returns the payload
-// range (start, end) of the first box matching want, along with whether it was found.
-func findMP4Atom(r io.ReaderAt, start, end int64, want string) (int64, int64, bool) {
+type mp4Box struct {
+	typ        string
+	start, end int64 // payload range
+}
+
+// mp4Boxes lists the child boxes directly within [start, end).
+func mp4Boxes(r io.ReaderAt, start, end int64) []mp4Box {
+	var boxes []mp4Box
 	pos := start
 	header := make([]byte, 8)
 	for pos+8 <= end {
 		if _, err := r.ReadAt(header, pos); err != nil {
-			return 0, 0, false
+			break
 		}
 		boxSize := int64(binary.BigEndian.Uint32(header[0:4]))
 		boxType := string(header[4:8])
@@ -505,7 +514,7 @@ func findMP4Atom(r io.ReaderAt, start, end int64, want string) (int64, int64, bo
 		case 1: // 64-bit extended size follows the header
 			ext := make([]byte, 8)
 			if _, err := r.ReadAt(ext, pos+8); err != nil {
-				return 0, 0, false
+				return boxes
 			}
 			boxSize = int64(binary.BigEndian.Uint64(ext))
 			payloadStart = pos + 16
@@ -519,17 +528,375 @@ func findMP4Atom(r io.ReaderAt, start, end int64, want string) (int64, int64, bo
 		}
 
 		if boxSize != 0 && boxSize < 8 {
-			return 0, 0, false // malformed box; bail out
+			break // malformed box
 		}
 		if payloadEnd <= pos || payloadEnd > end {
-			return 0, 0, false
+			break
 		}
-		if boxType == want {
-			return payloadStart, payloadEnd, true
+		boxes = append(boxes, mp4Box{typ: boxType, start: payloadStart, end: payloadEnd})
+		if len(boxes) > 10000 { // guard against pathological files
+			break
 		}
 		pos = payloadEnd
 	}
+	return boxes
+}
+
+// findMP4Atom returns the payload range of the first child box matching want.
+func findMP4Atom(r io.ReaderAt, start, end int64, want string) (int64, int64, bool) {
+	for _, b := range mp4Boxes(r, start, end) {
+		if b.typ == want {
+			return b.start, b.end, true
+		}
+	}
 	return 0, 0, false
+}
+
+// findMP4Path walks a nested chain of box types, e.g. "mdia","minf","stbl".
+func findMP4Path(r io.ReaderAt, start, end int64, path ...string) (int64, int64, bool) {
+	s, e := start, end
+	for _, t := range path {
+		ns, ne, ok := findMP4Atom(r, s, e, t)
+		if !ok {
+			return 0, 0, false
+		}
+		s, e = ns, ne
+	}
+	return s, e, true
+}
+
+// readBox reads a box payload into memory, rejecting anything larger than max.
+func readBox(r io.ReaderAt, start, end, max int64) ([]byte, bool) {
+	n := end - start
+	if n <= 0 || n > max {
+		return nil, false
+	}
+	buf := make([]byte, n)
+	if _, err := r.ReadAt(buf, start); err != nil {
+		return nil, false
+	}
+	return buf, true
+}
+
+// textTrackChapters extracts chapters from a QuickTime/MP4 chapter text track: a
+// text/tx3g track referenced by another track's "chap" track-reference (or, failing
+// that, the first text/subtitle track). Chapter start times come from the track's
+// sample durations (stts) and titles from the length-prefixed text samples located
+// via the sample tables (stsc/stsz/stco).
+func textTrackChapters(r io.ReaderAt, moovStart, moovEnd int64) []models.Chapter {
+	var traks []mp4Box
+	for _, b := range mp4Boxes(r, moovStart, moovEnd) {
+		if b.typ == "trak" {
+			traks = append(traks, b)
+		}
+	}
+	if len(traks) == 0 {
+		return nil
+	}
+
+	trackByID := make(map[uint32]mp4Box)
+	var chapRefID uint32
+	var textTrak *mp4Box
+	for i := range traks {
+		t := traks[i]
+		if id := trakID(r, t); id != 0 {
+			trackByID[id] = t
+		}
+		if ts, te, ok := findMP4Path(r, t.start, t.end, "tref", "chap"); ok {
+			if buf, ok := readBox(r, ts, te, 4096); ok && len(buf) >= 4 {
+				chapRefID = binary.BigEndian.Uint32(buf[:4])
+			}
+		}
+		if textTrak == nil {
+			if h := trakHandler(r, t); h == "text" || h == "sbtl" {
+				tt := t
+				textTrak = &tt
+			}
+		}
+	}
+
+	var chapTrak mp4Box
+	switch {
+	case chapRefID != 0 && trackByID[chapRefID].end != 0:
+		chapTrak = trackByID[chapRefID]
+	case textTrak != nil:
+		chapTrak = *textTrak
+	default:
+		return nil
+	}
+
+	ms, me, ok := findMP4Path(r, chapTrak.start, chapTrak.end, "mdia", "mdhd")
+	if !ok {
+		return nil
+	}
+	mdhd, ok := readBox(r, ms, me, 64)
+	if !ok {
+		return nil
+	}
+	timescale := mdhdTimescale(mdhd)
+	if timescale == 0 {
+		return nil
+	}
+
+	ss, se, ok := findMP4Path(r, chapTrak.start, chapTrak.end, "mdia", "minf", "stbl")
+	if !ok {
+		return nil
+	}
+
+	durations := parseStts(r, ss, se)
+	sizes := parseStsz(r, ss, se)
+	offsets := parseSampleOffsets(r, ss, se, sizes)
+	n := min(len(durations), len(sizes), len(offsets))
+	if n == 0 {
+		return nil
+	}
+	if n > 5000 {
+		n = 5000
+	}
+
+	chapters := make([]models.Chapter, 0, n)
+	var cumulative uint64
+	for i := 0; i < n; i++ {
+		start := float64(cumulative) / float64(timescale)
+		cumulative += uint64(durations[i])
+		title := readTextSample(r, offsets[i], sizes[i])
+		if title == "" {
+			title = fmt.Sprintf("Chapter %d", i+1)
+		}
+		chapters = append(chapters, models.Chapter{Title: title, Start: start})
+	}
+	return chapters
+}
+
+// trakID returns a track's ID from its tkhd box (0 if unavailable).
+func trakID(r io.ReaderAt, trak mp4Box) uint32 {
+	ts, te, ok := findMP4Atom(r, trak.start, trak.end, "tkhd")
+	if !ok {
+		return 0
+	}
+	buf, ok := readBox(r, ts, te, 256)
+	if !ok || len(buf) < 4 {
+		return 0
+	}
+	if buf[0] == 1 { // 64-bit creation/modification times
+		if len(buf) < 24 {
+			return 0
+		}
+		return binary.BigEndian.Uint32(buf[20:24])
+	}
+	if len(buf) < 16 {
+		return 0
+	}
+	return binary.BigEndian.Uint32(buf[12:16])
+}
+
+// trakHandler returns a track's handler type (e.g. "soun", "text", "sbtl").
+func trakHandler(r io.ReaderAt, trak mp4Box) string {
+	hs, he, ok := findMP4Path(r, trak.start, trak.end, "mdia", "hdlr")
+	if !ok {
+		return ""
+	}
+	buf, ok := readBox(r, hs, he, 256)
+	if !ok || len(buf) < 12 {
+		return ""
+	}
+	return string(buf[8:12])
+}
+
+func mdhdTimescale(b []byte) uint32 {
+	if len(b) < 4 {
+		return 0
+	}
+	if b[0] == 1 {
+		if len(b) < 24 {
+			return 0
+		}
+		return binary.BigEndian.Uint32(b[20:24])
+	}
+	if len(b) < 16 {
+		return 0
+	}
+	return binary.BigEndian.Uint32(b[12:16])
+}
+
+// parseStts expands the time-to-sample table into per-sample durations.
+func parseStts(r io.ReaderAt, stblStart, stblEnd int64) []uint32 {
+	bs, be, ok := findMP4Atom(r, stblStart, stblEnd, "stts")
+	if !ok {
+		return nil
+	}
+	buf, ok := readBox(r, bs, be, 1<<20)
+	if !ok || len(buf) < 8 {
+		return nil
+	}
+	entryCount := binary.BigEndian.Uint32(buf[4:8])
+	p := 8
+	var out []uint32
+	for i := uint32(0); i < entryCount; i++ {
+		if p+8 > len(buf) {
+			break
+		}
+		count := binary.BigEndian.Uint32(buf[p : p+4])
+		delta := binary.BigEndian.Uint32(buf[p+4 : p+8])
+		p += 8
+		if count > 100000 {
+			count = 100000
+		}
+		for j := uint32(0); j < count; j++ {
+			out = append(out, delta)
+			if len(out) > 20000 {
+				return out
+			}
+		}
+	}
+	return out
+}
+
+// parseStsz returns per-sample sizes from the sample-size table.
+func parseStsz(r io.ReaderAt, stblStart, stblEnd int64) []uint32 {
+	bs, be, ok := findMP4Atom(r, stblStart, stblEnd, "stsz")
+	if !ok {
+		return nil
+	}
+	buf, ok := readBox(r, bs, be, 1<<20)
+	if !ok || len(buf) < 12 {
+		return nil
+	}
+	sampleSize := binary.BigEndian.Uint32(buf[4:8])
+	sampleCount := binary.BigEndian.Uint32(buf[8:12])
+	if sampleCount > 20000 {
+		sampleCount = 20000
+	}
+	out := make([]uint32, 0, sampleCount)
+	if sampleSize != 0 {
+		for i := uint32(0); i < sampleCount; i++ {
+			out = append(out, sampleSize)
+		}
+		return out
+	}
+	p := 12
+	for i := uint32(0); i < sampleCount; i++ {
+		if p+4 > len(buf) {
+			break
+		}
+		out = append(out, binary.BigEndian.Uint32(buf[p:p+4]))
+		p += 4
+	}
+	return out
+}
+
+// parseSampleOffsets computes the absolute file offset of each sample using the
+// sample-to-chunk (stsc) and chunk-offset (stco/co64) tables plus sample sizes.
+func parseSampleOffsets(r io.ReaderAt, stblStart, stblEnd int64, sizes []uint32) []int64 {
+	var chunkOffsets []int64
+	if bs, be, ok := findMP4Atom(r, stblStart, stblEnd, "stco"); ok {
+		if buf, ok := readBox(r, bs, be, 1<<20); ok && len(buf) >= 8 {
+			count := binary.BigEndian.Uint32(buf[4:8])
+			p := 8
+			for i := uint32(0); i < count && p+4 <= len(buf); i++ {
+				chunkOffsets = append(chunkOffsets, int64(binary.BigEndian.Uint32(buf[p:p+4])))
+				p += 4
+			}
+		}
+	} else if bs, be, ok := findMP4Atom(r, stblStart, stblEnd, "co64"); ok {
+		if buf, ok := readBox(r, bs, be, 1<<20); ok && len(buf) >= 8 {
+			count := binary.BigEndian.Uint32(buf[4:8])
+			p := 8
+			for i := uint32(0); i < count && p+8 <= len(buf); i++ {
+				chunkOffsets = append(chunkOffsets, int64(binary.BigEndian.Uint64(buf[p:p+8])))
+				p += 8
+			}
+		}
+	}
+	if len(chunkOffsets) == 0 {
+		return nil
+	}
+
+	type stscRun struct{ firstChunk, samplesPerChunk uint32 }
+	var runs []stscRun
+	if bs, be, ok := findMP4Atom(r, stblStart, stblEnd, "stsc"); ok {
+		if buf, ok := readBox(r, bs, be, 1<<20); ok && len(buf) >= 8 {
+			count := binary.BigEndian.Uint32(buf[4:8])
+			p := 8
+			for i := uint32(0); i < count && p+12 <= len(buf); i++ {
+				runs = append(runs, stscRun{
+					firstChunk:      binary.BigEndian.Uint32(buf[p : p+4]),
+					samplesPerChunk: binary.BigEndian.Uint32(buf[p+4 : p+8]),
+				})
+				p += 12
+			}
+		}
+	}
+	if len(runs) == 0 {
+		return nil
+	}
+
+	samplesPerChunk := func(chunk uint32) uint32 {
+		var spc uint32
+		for _, rn := range runs {
+			if rn.firstChunk <= chunk {
+				spc = rn.samplesPerChunk
+			} else {
+				break
+			}
+		}
+		return spc
+	}
+
+	offsets := make([]int64, 0, len(sizes))
+	sampleIdx := 0
+	for ci := 1; ci <= len(chunkOffsets); ci++ {
+		spc := samplesPerChunk(uint32(ci))
+		if spc > 20000 {
+			spc = 20000
+		}
+		base := chunkOffsets[ci-1]
+		var within int64
+		for k := uint32(0); k < spc; k++ {
+			if sampleIdx >= len(sizes) {
+				return offsets
+			}
+			offsets = append(offsets, base+within)
+			within += int64(sizes[sampleIdx])
+			sampleIdx++
+		}
+	}
+	return offsets
+}
+
+// readTextSample reads one chapter text sample: a 2-byte length prefix followed by
+// the title (UTF-8, or UTF-16 with a byte-order mark).
+func readTextSample(r io.ReaderAt, offset int64, size uint32) string {
+	if size < 2 || size > 65536 {
+		return ""
+	}
+	buf := make([]byte, size)
+	if _, err := r.ReadAt(buf, offset); err != nil {
+		return ""
+	}
+	textLen := int(binary.BigEndian.Uint16(buf[0:2]))
+	if 2+textLen > len(buf) {
+		textLen = len(buf) - 2
+	}
+	return strings.TrimSpace(decodeText(buf[2 : 2+textLen]))
+}
+
+func decodeText(b []byte) string {
+	if len(b) >= 2 && b[0] == 0xFE && b[1] == 0xFF { // UTF-16 BE BOM
+		u := make([]uint16, 0, (len(b)-2)/2)
+		for i := 2; i+1 < len(b); i += 2 {
+			u = append(u, uint16(b[i])<<8|uint16(b[i+1]))
+		}
+		return string(utf16.Decode(u))
+	}
+	if len(b) >= 2 && b[0] == 0xFF && b[1] == 0xFE { // UTF-16 LE BOM
+		u := make([]uint16, 0, (len(b)-2)/2)
+		for i := 2; i+1 < len(b); i += 2 {
+			u = append(u, uint16(b[i+1])<<8|uint16(b[i]))
+		}
+		return string(utf16.Decode(u))
+	}
+	return string(b)
 }
 
 // parseChplAtom decodes a Nero "chpl" chapter-list box payload. The layout follows
