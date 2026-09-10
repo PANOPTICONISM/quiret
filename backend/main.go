@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"mime"
 	"net/http"
 	"os"
 	"os/signal"
@@ -19,6 +20,11 @@ import (
 
 func main() {
 	godotenv.Load("../.env")
+
+	// Ensure correct content types for the PWA assets when serving static files
+	// (Go's built-in table doesn't always cover these).
+	mime.AddExtensionType(".webmanifest", "application/manifest+json")
+	mime.AddExtensionType(".svg", "image/svg+xml")
 
 	dataPath := os.Getenv("DATA_PATH")
 	if dataPath == "" {
