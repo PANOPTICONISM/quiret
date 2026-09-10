@@ -6,6 +6,7 @@
     FOLIATE_FORMATS,
   } from "../lib/constants.js";
   import BookCard from "./BookCard.svelte";
+  import BookEditModal from "./BookEditModal.svelte";
 
   let { onOpenBook } = $props();
 
@@ -15,6 +16,7 @@
   let searchQuery = $state("");
   let sortBy = $state("added");
   let dragDepth = $state(0);
+  let editingBook = $state(null);
 
   const isDragging = $derived(dragDepth > 0);
 
@@ -211,6 +213,24 @@
   const triggerUpload = () => {
     document.getElementById("file-input")?.click();
   };
+
+  const handleBookSaved = (patch) => {
+    if (!editingBook) return;
+    const id = editingBook.id;
+    books = books.map((b) =>
+      b.id === id
+        ? {
+            ...b,
+            title: patch.title,
+            author: patch.author,
+            ...(patch.coverPath !== undefined
+              ? { coverPath: patch.coverPath, _cacheBust: Date.now() }
+              : {}),
+          }
+        : b,
+    );
+    editingBook = null;
+  };
 </script>
 
 <input
@@ -312,6 +332,7 @@
               progress={progressByBookId.get(book.id) ?? 0}
               onOpen={onOpenBook}
               onDelete={deleteBook}
+              onEdit={(b) => (editingBook = b)}
             />
           </div>
         {/each}
@@ -327,6 +348,7 @@
           progress={progressByBookId.get(book.id) ?? 0}
           onOpen={onOpenBook}
           onDelete={deleteBook}
+          onEdit={(b) => (editingBook = b)}
         />
       {/each}
     </div>
@@ -349,6 +371,14 @@
     </div>
   {/if}
 </div>
+
+{#if editingBook}
+  <BookEditModal
+    book={editingBook}
+    onClose={() => (editingBook = null)}
+    onSaved={handleBookSaved}
+  />
+{/if}
 
 {#if isDragging}
   <div class="drop-overlay" aria-hidden="true">

@@ -241,6 +241,40 @@ func SaveProgress(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
+func UpdateBook(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	bookID := vars["id"]
+
+	var payload struct {
+		Title  string `json:"title"`
+		Author string `json:"author"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	title := strings.TrimSpace(payload.Title)
+	author := strings.TrimSpace(payload.Author)
+	if title == "" {
+		http.Error(w, "Title is required", http.StatusBadRequest)
+		return
+	}
+
+	res, err := db.DB.Exec("UPDATE books SET title = ?, author = ? WHERE id = ?", title, author, bookID)
+	if err != nil {
+		http.Error(w, "Failed to update book", http.StatusInternalServerError)
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		http.Error(w, "Book not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"title": title, "author": author})
+}
+
 func ServeBookFile(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	bookID := vars["id"]

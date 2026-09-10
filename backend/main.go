@@ -93,6 +93,7 @@ func main() {
 	api.HandleFunc("/books", handlers.GetBooks).Methods("GET")
 	api.HandleFunc("/books", handlers.UploadBook).Methods("POST")
 	api.HandleFunc("/books/{id}", handlers.GetBook).Methods("GET")
+	api.HandleFunc("/books/{id}", handlers.UpdateBook).Methods("PUT")
 	api.HandleFunc("/books/{id}/file", handlers.ServeBookFile).Methods("GET")
 	api.HandleFunc("/books/{id}/chapters", handlers.GetChapters).Methods("GET")
 	api.HandleFunc("/books/{id}/cover", handlers.ServeCover).Methods("GET")

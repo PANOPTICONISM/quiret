@@ -1,9 +1,12 @@
 <script>
   import { AUDIO_FORMATS } from "../lib/constants.js";
 
-  let { book, progress = 0, onOpen, onDelete } = $props();
+  let { book, progress = 0, onOpen, onDelete, onEdit } = $props();
 
   const isAudio = $derived(AUDIO_FORMATS.includes(book.fileType));
+  const coverSrc = $derived(
+    `/api/books/${book.id}/cover${book._cacheBust ? `?v=${book._cacheBust}` : ""}`,
+  );
 </script>
 
 <article class="book-card">
@@ -14,11 +17,7 @@
   >
     <div class="cover-container">
       {#if book.coverPath}
-        <img
-          src="/api/books/{book.id}/cover"
-          alt={book.title}
-          loading="lazy"
-        />
+        <img src={coverSrc} alt={book.title} loading="lazy" />
       {:else}
         <div class="no-cover">
           <span class="no-cover-title">{book.title}</span>
@@ -47,6 +46,19 @@
       <p>{book.author || "Unknown"}</p>
     </div>
   </button>
+  {#if onEdit}
+    <button
+      type="button"
+      class="edit-btn"
+      onclick={() => onEdit(book)}
+      aria-label="Edit details"
+    >
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 20h9" />
+        <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+      </svg>
+    </button>
+  {/if}
   <button
     type="button"
     class="delete-btn"
@@ -199,6 +211,34 @@
 
   .delete-btn:hover {
     background: var(--danger);
+  }
+
+  .edit-btn {
+    position: absolute;
+    top: 0.4rem;
+    right: 2.4rem;
+    background: var(--overlay-button-bg);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s, background 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .book-card:hover .edit-btn,
+  .edit-btn:focus-visible {
+    opacity: 1;
+  }
+
+  .edit-btn:hover {
+    background: var(--accent);
   }
 
   .book-info {
