@@ -23,6 +23,17 @@
   let editingBook = $state(null);
   let showPodcasts = $state(false);
   let activeKind = $state("All");
+  let showControls = $state(false);
+
+  // Close the sort/filter menu when clicking outside it.
+  $effect(() => {
+    if (!showControls) return;
+    const onDocClick = (e) => {
+      if (!e.target.closest(".controls-wrap")) showControls = false;
+    };
+    document.addEventListener("click", onDocClick);
+    return () => document.removeEventListener("click", onDocClick);
+  });
 
   const isDragging = $derived(dragDepth > 0);
 
@@ -309,28 +320,59 @@
             class="search-input"
           />
         </div>
-        {#if presentKinds.length > 1}
-          <div class="select-wrapper">
-            <select class="sort-select" bind:value={activeKind} aria-label="Filter by type">
-              <option value="All">All types</option>
-              {#each presentKinds as kind (kind)}
-                <option value={kind}>{kind}</option>
-              {/each}
-            </select>
-            <svg class="select-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <polyline points="6 9 12 15 18 9" />
+        <div class="controls-wrap">
+          <button
+            class="icon-btn"
+            class:active={activeKind !== "All" || sortBy !== "added"}
+            onclick={() => (showControls = !showControls)}
+            aria-label="Sort and filter"
+            aria-expanded={showControls}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="4" y1="21" x2="4" y2="14" />
+              <line x1="4" y1="10" x2="4" y2="3" />
+              <line x1="12" y1="21" x2="12" y2="12" />
+              <line x1="12" y1="8" x2="12" y2="3" />
+              <line x1="20" y1="21" x2="20" y2="16" />
+              <line x1="20" y1="12" x2="20" y2="3" />
+              <line x1="1" y1="14" x2="7" y2="14" />
+              <line x1="9" y1="8" x2="15" y2="8" />
+              <line x1="17" y1="16" x2="23" y2="16" />
             </svg>
-          </div>
-        {/if}
-        <div class="select-wrapper">
-          <select class="sort-select" bind:value={sortBy} aria-label="Sort books">
-            <option value="added">Recently added</option>
-            <option value="title">Title</option>
-            <option value="author">Author</option>
-          </select>
-          <svg class="select-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
+          </button>
+          {#if showControls}
+            <div class="controls-menu" role="menu">
+              {#if presentKinds.length > 1}
+                <span class="menu-heading">Type</span>
+                {#each ["All", ...presentKinds] as kind (kind)}
+                  <button
+                    class="menu-option"
+                    class:selected={activeKind === kind}
+                    onclick={() => (activeKind = kind)}
+                  >
+                    <span>{kind === "All" ? "All types" : kind}</span>
+                    {#if activeKind === kind}
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                    {/if}
+                  </button>
+                {/each}
+                <div class="menu-divider"></div>
+              {/if}
+              <span class="menu-heading">Sort by</span>
+              {#each [["added", "Recently added"], ["title", "Title"], ["author", "Author"]] as [value, label] (value)}
+                <button
+                  class="menu-option"
+                  class:selected={sortBy === value}
+                  onclick={() => (sortBy = value)}
+                >
+                  <span>{label}</span>
+                  {#if sortBy === value}
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                  {/if}
+                </button>
+              {/each}
+            </div>
+          {/if}
         </div>
         </div>
       {/if}
@@ -578,37 +620,70 @@
     box-shadow: 0 0 0 3px var(--accent-soft);
   }
 
-  .select-wrapper {
+  .controls-wrap {
     position: relative;
     display: inline-flex;
-    align-items: center;
   }
 
-  .sort-select {
-    appearance: none;
-    -webkit-appearance: none;
+  .icon-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .controls-menu {
+    position: absolute;
+    top: calc(100% + 0.4rem);
+    right: 0;
+    z-index: 20;
+    min-width: 190px;
     background: var(--surface);
     border: 1px solid var(--border);
-    color: var(--text);
-    padding: 0.5rem 2.1rem 0.5rem 0.85rem;
     border-radius: var(--radius);
-    font-size: 0.9rem;
-    line-height: 1.25;
-    font-family: inherit;
+    box-shadow: var(--shadow);
+    padding: 0.4rem;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .menu-heading {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-faint);
+    padding: 0.4rem 0.6rem 0.25rem;
+  }
+
+  .menu-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    background: none;
+    border: none;
     cursor: pointer;
-  }
-
-  .sort-select:focus {
-    outline: none;
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px var(--accent-soft);
-  }
-
-  .select-chevron {
-    position: absolute;
-    right: 0.7rem;
+    text-align: left;
+    padding: 0.5rem 0.6rem;
+    border-radius: var(--radius-sm);
     color: var(--text-muted);
-    pointer-events: none;
+    font-family: inherit;
+    font-size: 0.9rem;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .menu-option:hover {
+    background: var(--tint);
+    color: var(--text);
+  }
+
+  .menu-option.selected {
+    color: var(--accent);
+    font-weight: 500;
+  }
+
+  .menu-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 0.4rem 0.3rem;
   }
 
   .upload-btn {
